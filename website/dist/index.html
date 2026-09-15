@@ -1,0 +1,70 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Page source only; downloads retain their licenses. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101311">
+  <title>NotchShot — A little context. From any app.</title>
+  <meta name="description" content="Capture an app's screenshot, text and accessibility context. Keep your shots in a tiny Mac notch shelf, then copy them together.">
+  <meta property="og:title" content="NotchShot — A little context. From any app.">
+  <meta property="og:description" content="Screenshots and app context, together in your Mac's notch. Watch the demo and try the early preview.">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23101311'/%3E%3Cpath d='M12 7H9a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M7 20v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3' fill='none' stroke='%239febcd' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="page">
+    <header>
+      <a class="brand" href="/" aria-label="NotchShot home">
+        <svg width="25" height="25" viewBox="0 0 32 32" aria-hidden="true"><path d="M12 7H9a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M7 20v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/></svg>
+        <span>NotchShot</span>
+      </a>
+      <span class="release">A small app for your Mac</span>
+    </header>
+    <main id="main">
+      <section class="intro" aria-labelledby="headline">
+        <h1 id="headline">A little context.<br><span>From any app.</span></h1>
+        <p class="lede">Capture the window, its text, and the controls that give it context. Keep it all in a tiny shelf in your notch, ready to copy into your next conversation.</p>
+        <div class="actions">
+          <a class="download" href="/downloads/NotchShot-0.5.2.zip" download>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 17v3h14v-3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Download for macOS
+          </a>
+          <a class="watch" href="#demo">Watch the demo <span aria-hidden="true">↗</span></a>
+        </div>
+        <p class="requirements">Early preview · Apple silicon · macOS 15+ · 9 MB</p>
+      </section>
+
+      <figure id="demo" class="demo">
+        <video controls playsinline preload="metadata" poster="/assets/demo-poster.jpg" width="1664" height="1080" aria-label="NotchShot demo: capture apps, collect shots in the shelf, then copy and paste them together" aria-describedby="demo-description">
+          <source src="/assets/notchshot-demo.mp4" type="video/mp4">
+          Your browser doesn’t support this video. <a href="/assets/notchshot-demo.mp4">Download the demo</a>.
+        </video>
+        <figcaption><span>Capture. Collect. Copy.</span><span>1 min 22 sec</span></figcaption>
+        <p id="demo-description" class="sr-only">The demo shows capturing a browser, Notion and a coding app, hovering to preview shots, selecting several shots, and pasting their screenshots and context into a conversation.</p>
+      </figure>
+
+      <section class="features" aria-label="How NotchShot works">
+        <div><h2>More than a screenshot.</h2><p>Keep the image, readable text, and the app’s accessibility tree together.</p></div>
+        <div><h2>A shortcut to context.</h2><p>Press left Shift + right Shift to capture. Select a few shots and copy them in one go.</p></div>
+        <div><h2>Right here on your Mac.</h2><p>Capture and text recognition run locally. You choose what to copy or export.</p></div>
+      </section>
+
+      <aside class="install-note" aria-label="Preview information">
+        <p><strong>A little heads-up.</strong> This is an early development build and isn’t notarized by Apple yet, so macOS may block it from opening. Capture needs Accessibility and Screen Recording permissions. What’s captured and pasted can vary by app.</p>
+      </aside>
+    </main>
+    <footer>
+      <span>NotchShot <span class="muted">· Made by Brian</span></span>
+      <nav aria-label="Project links">
+        <a href="/downloads/NotchShot-0.5.2-source.zip" download>Source code</a>
+        <a href="/downloads/LICENSE.txt">GPL-3.0</a>
+        <a href="/downloads/CREDITS.txt">Credits</a>
+      </nav>
+    </footer>
+  </div>
+</body>
+</html>
