@@ -24,15 +24,37 @@ site. They are release snapshots, not the development source of truth. When
 publishing a new app build, update both the app and corresponding-source ZIPs,
 their names in the page, and their notices together.
 
-## Sites deployment
+## Vercel deployment
 
-The existing site is <https://notchshot.vercel.app>.
-On the original development machine, `landing-page/` is its separate Sites
-checkout and is ignored by the parent repository. `website/dist/` is the GitHub
-source of truth. Copy its contents into that checkout's `dist/` before using
-Sites to publish an update, preserving the checkout's `.openai/hosting.json` and
-git metadata. From a fresh clone, use Sites to connect the static output to the
-existing site; do not create a duplicate site.
+Live site: <https://notchshot.vercel.app>
+
+Vercel project `notchshot` in the `brianchew` team is connected to the private
+`bchewy/notchshot` GitHub repository. Pushes to `main` deploy production updates.
+
+Project settings are checked into the repository-root `vercel.json`:
+
+- Root directory: repository root.
+- Framework: Other.
+- Build and install commands: empty; no build is needed.
+- Output directory: `website/dist`.
+
+`.vercelignore` permits only the static website and its deployment configuration
+in CLI uploads. Swift sources, local captures, build caches, and credentials are
+excluded. `.vercel/` and local environment files remain outside git.
+
+To deploy manually, run from the repository root after signing in to Vercel:
+
+```sh
+npx vercel link --scope brianchew --project notchshot
+npx vercel deploy --prod --scope brianchew
+```
+
+Add a custom domain in the project's Vercel Domains settings and use the DNS
+records Vercel supplies for that exact domain.
+
+The previous Sites deployment and its separate ignored `landing-page/` checkout
+are retained as a historical copy. `website/dist/` is the source of truth for
+new changes.
 
 Page source uses [MIT](LICENSE). Downloaded apps, source archives, media, and
 third-party assets retain the licenses described in [LICENSING.md](../LICENSING.md).

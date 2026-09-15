@@ -71,7 +71,7 @@ its live app remain intact.
 ## Website
 
 The landing page is plain HTML and CSS. See [website/README.md](website/README.md)
-for local preview and Sites publishing instructions.
+for local preview and Vercel publishing instructions.
 
 ## License and credits
 
