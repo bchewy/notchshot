@@ -1,0 +1,50 @@
+# Third-party notices
+
+The combined NotchShot application is licensed under GPL-3.0-only. See LICENSE.
+Brian Chew's independent original code and website source are also available
+under LICENSE-MIT, with the scope and exceptions in LICENSING.md. This does not
+relicense the Notchi-derived code or third-party assets.
+
+## Notchi
+
+Project: https://github.com/sk-ruban/notchi
+
+Author: sk-ruban and Notchi contributors.
+
+Source revision: `e873da231340b3a5094c59ce7cb0ec2809d88ed1`
+
+License: GPL-3.0-only, included in LICENSE and in the app bundle.
+
+`Sources/NotchShot/Support/NotchPanel.swift` adapts Notchi's borderless nonactivating floating panel and space behavior. `NotchGeometry.swift` adapts the public display and safe-area geometry from `NSScreen+Notch.swift`. The files were modified on 2026-09-15 for NotchShot.
+
+Notchi's private bezel-path lookup, agent hooks, usage reporting, network clients, mascot assets, and updater are not included. The new capture engine and preview/export interface are built for this app.
+
+NotchShot is an independent personal utility. It is not an OpenAI product and does not contain copied Codex implementation code or branding assets.
+
+## Capture shutter recording
+
+`Sources/NotchShot/Resources/CaptureShutter.wav` is adapted from “DSLR shutter sound (Fujifilm x-t3)” by **boredomfounder**, published on Freesound on July 9, 2025. The uploader identifies the camera as a Fujifilm X-T3 and says the recording was made on an iPhone 12.
+
+Source: https://freesound.org/people/boredomfounder/sounds/815501/
+
+License: **CC0 1.0 Universal** — https://creativecommons.org/publicdomain/zero/1.0/
+
+The official public HQ preview was trimmed to one 340 ms shutter, lightly high-pass filtered, faded at the boundaries, and peak-normalized for NotchShot. Processing details and checksums are recorded in `docs/SHUTTER_SOUND.md`. This is a third-party recording, not an official Fujifilm sound asset or endorsement.
+
+## Additional capture shutter recordings
+
+`CaptureShutterX100S.wav` is adapted from **Fuji X100S.wav** by **hmilleo**.
+
+Source: https://freesound.org/people/hmilleo/sounds/409096/
+
+License: **CC0 1.0** — https://creativecommons.org/publicdomain/zero/1.0/
+
+Changes: trimmed to one 520 ms excerpt, high-pass filtered at 90 Hz, faded at its boundaries, and peak-normalized. The uploader identifies the camera model. This third-party recording is not an official Fujifilm asset or endorsement.
+
+`CaptureShutterFinePixF11.wav` is adapted from **Fuji-Finepix-F11-Shoot.flac** by **Erdie**.
+
+Source: https://freesound.org/people/Erdie/sounds/50450/
+
+License: **CC BY 4.0** — https://creativecommons.org/licenses/by/4.0/
+
+Changes: trimmed to one 590 ms excerpt, high-pass filtered at 90 Hz, faded at its boundaries, and peak-normalized. The uploader identifies the camera model. This third-party recording is not an official Fujifilm asset or endorsement.

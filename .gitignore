@@ -1,0 +1,22 @@
+.build/
+.swiftpm/
+.DS_Store
+work/
+outputs/
+
+# Existing Sites deployment checkout has its own git history and remote.
+# The portable website source is versioned under website/.
+/landing-page/
+
+# Local credentials, signing material, and editor state.
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.key
+*.pem
+*.mobileprovision
+xcuserdata/
+*.xcuserstate
+.sites-runtime/
