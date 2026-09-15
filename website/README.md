@@ -26,7 +26,11 @@ their names in the page, and their notices together.
 
 ## Vercel deployment
 
-Live site: <https://notchshot.vercel.app>
+Live site: <https://notchshot.com>
+
+`www.notchshot.com` permanently redirects to the apex domain. Both domains are
+assigned to production in the Vercel project; Vercel manages DNS and HTTPS.
+The fallback deployment alias is <https://notchshot.vercel.app>.
 
 Vercel project `notchshot` in the `brianchew` team is connected to the private
 `bchewy/notchshot` GitHub repository. Pushes to `main` deploy production updates.
@@ -49,8 +53,9 @@ npx vercel link --scope brianchew --project notchshot
 npx vercel deploy --prod --scope brianchew
 ```
 
-Add a custom domain in the project's Vercel Domains settings and use the DNS
-records Vercel supplies for that exact domain.
+Manage the connected domain and its redirect in the project's Vercel Domains
+settings. Additional domain changes should use the DNS records Vercel supplies
+for the exact domain.
 
 The previous Sites deployment and its separate ignored `landing-page/` checkout
 are retained as a historical copy. `website/dist/` is the source of truth for

@@ -6,7 +6,7 @@ NotchShot is a local macOS utility that captures an app window, its readable
 text, and its accessibility tree, then keeps the result in a small shelf in
 your notch. Copy one shot or several into your next conversation.
 
-[Website and demo](https://notchshot.vercel.app) ·
+[Website and demo](https://notchshot.com) ·
 [User guide](docs/USER_GUIDE.md) · [Licensing](LICENSING.md)
 
 ## What it does
