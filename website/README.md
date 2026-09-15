@@ -32,7 +32,7 @@ Live site: <https://notchshot.com>
 assigned to production in the Vercel project; Vercel manages DNS and HTTPS.
 The fallback deployment alias is <https://notchshot.vercel.app>.
 
-Vercel project `notchshot` in the `brianchew` team is connected to the private
+Vercel project `notchshot` in the `brianchew` team is connected to the public
 `bchewy/notchshot` GitHub repository. Pushes to `main` deploy production updates.
 
 Project settings are checked into the repository-root `vercel.json`:
