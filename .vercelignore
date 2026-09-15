@@ -1,0 +1,6 @@
+# Upload only the static website and its deployment configuration.
+/*
+!/vercel.json
+!/website
+/website/*
+!/website/dist

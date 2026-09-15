@@ -20,3 +20,4 @@ outputs/
 xcuserdata/
 *.xcuserstate
 .sites-runtime/
+.vercel/
