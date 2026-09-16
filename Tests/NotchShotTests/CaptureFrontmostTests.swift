@@ -8,9 +8,10 @@ import XCTest
 /// under test instead of only in production.
 final class CaptureFrontmostTests: XCTestCase {
     @MainActor
-    func testPartialThenCompleteResultPresentsTheCardTwiceAndLandsOnce() async throws {
+    func testPartialThenCompleteResultPresentsTheCardTwiceAndAcceptsOnce() async throws {
         let f = makeFixture()
         defer { f.store.stop() }
+        f.store.autoCollectCaptures = false
         f.store.captureFrontmost()
         XCTAssertTrue(f.store.isCapturing)
         XCTAssertNil(f.store.statusNotice)
@@ -31,9 +32,10 @@ final class CaptureFrontmostTests: XCTestCase {
         XCTAssertEqual(f.store.pendingCapture?.accessibilityText, "Hello")
         XCTAssertEqual(f.recorder.presented.map(\.id), [partial.id, partial.id])
         XCTAssertEqual(f.captureSound.playCount, 1, "The shutter plays once per capture, not once per callback.")
-        try await waitUntil { f.store.captures.count == 1 }
+
+        f.store.acceptPendingCapture()
         XCTAssertNil(f.store.pendingCapture)
-        XCTAssertEqual(f.store.captures.first?.accessibilityText, "Hello")
+        XCTAssertEqual(f.store.captures.map(\.accessibilityText), ["Hello"])
         XCTAssertEqual(f.store.statusNotice?.title, "Captured")
         XCTAssertEqual(f.store.page, .shelf)
         XCTAssertTrue(f.store.isExpanded)
@@ -49,7 +51,7 @@ final class CaptureFrontmostTests: XCTestCase {
         try await waitUntil { !f.store.isCapturing }
         XCTAssertNil(f.store.pendingCapture)
         XCTAssertEqual(f.store.statusNotice?.kind, .error)
-        XCTAssertEqual(f.store.statusMessage, "Nothing could be captured.")
+        XCTAssertEqual(f.store.statusNotice?.message, "Nothing could be captured.")
         XCTAssertEqual(f.store.page, .shelf)
         XCTAssertTrue(f.store.isExpanded)
         XCTAssertTrue(f.store.captures.isEmpty)
@@ -176,7 +178,12 @@ private final class CaptureServiceFake: CaptureServing {
         self.onScreenshot = onScreenshot
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
-                self.continuation = continuation
+                if Task.isCancelled {
+                    self.cancelledRequests += 1
+                    continuation.resume(throwing: CancellationError())
+                } else {
+                    self.continuation = continuation
+                }
             }
         } onCancel: {
             Task { @MainActor in
@@ -223,6 +230,4 @@ private final class PresentationRecorder {
 private final class CaptureSoundCounter: CaptureSoundPlaying {
     var playCount = 0
     func play() { playCount += 1 }
-    func select(_ choice: CaptureShutterSound) {}
-    func setVolume(_ volume: Float) {}
 }

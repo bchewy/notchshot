@@ -493,6 +493,8 @@ final class CaptureStore {
         activationObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
+                // The app in front now, not the one the notification named. They
+                // agree in practice, and this keeps the store on the capture seam.
                 self.updateTarget(self.captureService.frontmostTarget())
                 self.refreshPermissions()
             }
@@ -553,7 +555,6 @@ final class CaptureStore {
         // left it rather than closing and reopening it around every capture.
         if isExpanded && openShelfAfterCapture { page = .shelf }
         clearStatus()
-        let revision = historyRevision
         captureRevision += 1
         let request = captureRevision
         var sounded = false
@@ -561,7 +562,7 @@ final class CaptureStore {
             let outcome: Result<CaptureResult, Error>
             do {
                 outcome = .success(try await captureService.capture(target: target) { [weak self] partial in
-                    guard let self, request == self.captureRevision, revision == self.historyRevision,
+                    guard let self, request == self.captureRevision,
                           self.dismissedCaptureRevision != request else { return }
                     self.pendingCapture = partial
                     if self.arrivalSuppressedRevision != request { self.onPresentCard?(partial) }
@@ -573,7 +574,6 @@ final class CaptureStore {
             guard request == captureRevision else { return }
             isCapturing = false
             captureTask = nil
-            guard revision == historyRevision else { return }
             switch outcome {
             case .success(let result):
                 guard dismissedCaptureRevision != request else { return }
@@ -596,7 +596,8 @@ final class CaptureStore {
 
     /// Clearing the shelf or stopping the store abandons a capture in flight
     /// instead of letting it finish, hold its PNG, and block the next capture.
-    /// Bumping the revision makes the abandoned task's callbacks stale.
+    /// Bumping the revision makes the abandoned task's callbacks stale, which
+    /// is also why the capture path needs no history check of its own.
     private func cancelCapture() {
         captureTask?.cancel()
         captureTask = nil

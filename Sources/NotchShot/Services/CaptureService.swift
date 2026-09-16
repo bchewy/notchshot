@@ -47,7 +47,7 @@ final class CaptureService: CaptureServing {
     }
 
     /// Only another regular app can be a target; NotchShot's own panels never are.
-    static func target(for app: NSRunningApplication?) -> CaptureTarget? {
+    private static func target(for app: NSRunningApplication?) -> CaptureTarget? {
         guard let app, app.processIdentifier != ProcessInfo.processInfo.processIdentifier,
               app.activationPolicy == .regular else { return nil }
         return CaptureTarget(pid: app.processIdentifier, appName: app.localizedName ?? "Application",
