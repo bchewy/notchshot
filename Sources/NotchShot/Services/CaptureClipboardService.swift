@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 import AppKit
-import CryptoKit
 import ImageIO
 
 /// Offers the screenshot and its context as one rich document, with independent
@@ -25,7 +24,7 @@ enum CaptureClipboardService {
             // potentially 40-megapixel original just to offer a TIFF alternative.
         }
         item.setString(batch.contextText, forType: .string)
-        item.setString(batchIdentifier(for: batch), forType: batchIdentifierType)
+        item.setString(batch.identity, forType: batchIdentifierType)
         return item
     }
 
@@ -51,26 +50,9 @@ enum CaptureClipboardService {
         })
     }
 
-    static func batchIdentifier(for batch: CaptureBatch) -> String {
-        var digest = SHA256()
-        func append(_ bytes: Data) {
-            var length = UInt64(bytes.count).bigEndian
-            withUnsafeBytes(of: &length) { digest.update(data: Data($0)) }
-            digest.update(data: bytes)
-        }
-        append(Data("NotchShot batch v1".utf8))
-        append(Data(batch.contextStyle.rawValue.utf8))
-        append(Data(batch.contextText.utf8))
-        for capture in batch.captures {
-            append(Data(capture.id.uuidString.utf8))
-            append(capture.pngData ?? Data())
-        }
-        return digest.finalize().map { String(format: "%02x", $0) }.joined()
-    }
-
     static func matchesBatchIdentity(item: NSPasteboardItem, batch: CaptureBatch) -> Bool {
         item.string(forType: .string) == batch.contextText &&
-            item.string(forType: batchIdentifierType) == batchIdentifier(for: batch)
+            item.string(forType: batchIdentifierType) == batch.identity
     }
 
     static func makeItem(for capture: CaptureResult) -> NSPasteboardItem {
