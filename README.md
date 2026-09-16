@@ -56,8 +56,9 @@ Command Line Tools alone can build the app but cannot compile the test target.
 GitHub Actions runs the build and the suite on every push and pull request
 (`.github/workflows/tests.yml`).
 
-The current suite has **295 passing tests**, covering capture formatting,
-clipboard preparation, selection, shortcuts, shelf motion, and auto-collapse.
+The current suite has **301 tests**, covering the capture entry path, capture
+formatting, clipboard preparation, selection, shortcuts, shelf motion, and
+auto-collapse.
 See [verification notes](docs/VERIFICATION.md) for the historical checks and
 [the user guide](docs/USER_GUIDE.md) for permissions and signing troubleshooting.
 
