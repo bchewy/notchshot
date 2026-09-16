@@ -26,6 +26,7 @@ jobs:
         run: swift build --disable-sandbox
 
       - name: Test
+        shell: bash
         run: swift test --disable-sandbox 2>&1 | tee test-output.log
 
       - name: Test summary

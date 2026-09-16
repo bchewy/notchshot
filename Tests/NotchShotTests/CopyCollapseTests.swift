@@ -33,7 +33,7 @@ final class CopyCollapseTests: XCTestCase {
                 XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.contextText)
                 XCTAssertEqual(fixture.clipboard.data(forType: .png), capture.pngData)
             }
-            try await settle()
+            try await settle(untilCollapsed: store)
             XCTAssertFalse(store.isExpanded, "Successful \(name) copy should close the notch.")
             XCTAssertEqual(store.captures.map(\.id), [capture.id], "Collapsing must retain the saved shot.")
         }
@@ -59,7 +59,7 @@ final class CopyCollapseTests: XCTestCase {
         XCTAssertEqual(store.selectedID, selected.id)
         XCTAssertEqual(store.page, .shelf)
         XCTAssertTrue(store.isExpanded)
-        try await settle()
+        try await settle(untilCollapsed: store)
         XCTAssertFalse(store.isExpanded)
         XCTAssertEqual(store.selectedID, selected.id)
     }
@@ -90,7 +90,7 @@ final class CopyCollapseTests: XCTestCase {
         store.copySoundEnabled = false
         let previousPlays = fixture.sound.playCount
         XCTAssertTrue(store.copyCapture(capture.id))
-        try await settle()
+        try await settle(untilCollapsed: store)
         XCTAssertFalse(store.isExpanded)
         XCTAssertEqual(fixture.sound.playCount, previousPlays)
         XCTAssertTrue(fixture.preferences.bool(forKey: "collapseAfterCopy"))
@@ -355,8 +355,19 @@ final class CopyCollapseTests: XCTestCase {
         return capture
     }
 
+    /// Long enough for a 20 ms collapse to have fired when one is expected not to.
     private func settle() async throws {
         try await Task.sleep(for: .milliseconds(70))
+    }
+
+    /// A collapse that is expected to happen is awaited, not assumed to land
+    /// inside a fixed sleep; the assertion that follows still fails on timeout.
+    @MainActor
+    private func settle(untilCollapsed store: CaptureStore) async throws {
+        for _ in 0..<200 {
+            if !store.isExpanded { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
     }
 }
 
