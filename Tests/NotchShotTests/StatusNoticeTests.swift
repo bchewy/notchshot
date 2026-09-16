@@ -8,7 +8,7 @@ final class StatusNoticeTests: XCTestCase {
         let createdAt = Date(timeIntervalSince1970: 1_800_000_000)
         let cases: [(StatusNotice.Kind, TimeInterval)] = [(.success, 3), (.info, 5), (.error, 8)]
         for (kind, duration) in cases {
-            let notice = StatusNotice(message: "Status", kind: kind, createdAt: createdAt)
+            let notice = StatusNotice(kind: kind, title: "Status", message: "Status", createdAt: createdAt)
             let deadline = createdAt.addingTimeInterval(duration)
             XCTAssertEqual(notice.createdAt, createdAt)
             XCTAssertEqual(notice.expiresAt, deadline)
@@ -22,55 +22,38 @@ final class StatusNoticeTests: XCTestCase {
         }
     }
 
-    func testCompactTitlesKeepTheFullMessageAvailable() {
-        let exported = "Exported to NotchShot-2026-09-15T11-21-53Z-600DF2F5."
-        let copied = "My long application name shot copied."
-        let unknown = "An app can expose less accessibility information than expected."
-        for (message, title, kind) in [
-            (exported, "Exported", StatusNotice.Kind.success),
-            (copied, "Copied", .success),
-            (unknown, "Notice", .info)
-        ] {
-            let notice = StatusNotice(message: message)
-            XCTAssertEqual(notice.title, title)
-            XCTAssertEqual(notice.kind, kind)
-            XCTAssertEqual(notice.message, message)
-        }
-    }
+    func testNoticeKeepsTheKindTitleAndFullMessageItWasGiven() {
+        let message = "Could not export to Exported items. The copied archive could not be saved."
+        let notice = StatusNotice(kind: .error, title: "Needs attention", message: message)
+        XCTAssertEqual(notice.kind, .error)
+        XCTAssertEqual(notice.title, "Needs attention")
+        XCTAssertEqual(notice.message, message)
 
-    func testFailurePrefixesTakePrecedenceOverSuccessfulWordsInDetails() {
-        for message in [
-            "Export failed: the copied archive could not be saved.",
-            "Could not copy the capture. A previously copied shot is unchanged.",
-            "Could not export to Exported items."
-        ] {
-            let notice = StatusNotice(message: message)
-            XCTAssertEqual(notice.kind, .error, message)
-            XCTAssertEqual(notice.title, "Needs attention", message)
-            XCTAssertEqual(notice.message, message)
-        }
+        let copied = StatusNotice(kind: .success, title: "Copied", message: "2 shots copied. Your next ⌘V pastes the screenshots in order.")
+        XCTAssertEqual(copied.kind, .success, "The producer's kind stands whatever the wording says.")
+        XCTAssertEqual(copied.title, "Copied")
     }
 
     @MainActor
-    func testRepeatedMessagesCreateFreshNoticesAndEmptyMessagesClearThem() throws {
+    func testRepeatedReportsCreateFreshNoticesAndClearingRemovesThem() throws {
         let fixture = makeFixture()
         let store = fixture.store
         defer { store.stop() }
-        store.statusMessage = "Screenshot copied."
+        store.report(.success, "Copied", "Screenshot copied.")
         let first = try XCTUnwrap(store.statusNotice)
-        store.statusMessage = "Screenshot copied."
+        store.report(.success, "Copied", "Screenshot copied.")
         let second = try XCTUnwrap(store.statusNotice)
         XCTAssertNotEqual(second.id, first.id, "The same action repeated should replay its confirmation.")
         XCTAssertEqual(second.message, first.message)
         XCTAssertGreaterThanOrEqual(second.createdAt, first.createdAt)
         XCTAssertGreaterThanOrEqual(second.expiresAt, first.expiresAt)
+        XCTAssertEqual(store.statusMessage, "Screenshot copied.")
 
-        store.statusMessage = nil
+        store.clearStatus()
         XCTAssertNil(store.statusNotice)
-        store.statusMessage = "Text copied with its source labels."
+        XCTAssertNil(store.statusMessage)
+        store.report(.success, "Copied", "Text copied with its source labels.")
         XCTAssertNotNil(store.statusNotice)
-        store.statusMessage = " \n\t "
-        XCTAssertNil(store.statusNotice)
         XCTAssertEqual(store.page, .shelf)
         XCTAssertFalse(store.isExpanded)
     }
@@ -93,10 +76,37 @@ final class StatusNoticeTests: XCTestCase {
         XCTAssertTrue(store.isExpanded)
     }
 
+    @MainActor
+    func testBatchAndSingleCopiesAreBothSuccessNoticesWhateverTheirWording() throws {
+        let fixture = makeFixture()
+        let store = fixture.store
+        defer { store.stop() }
+        let first = CaptureResult(appName: "First", bundleIdentifier: "com.example.first", windowTitle: "One",
+                                  accessibilityText: "Alpha")
+        let second = CaptureResult(appName: "Second", bundleIdentifier: "com.example.second", windowTitle: "Two",
+                                   accessibilityText: "Beta")
+        store.captures = [first, second]
+        store.isExpanded = true
+        store.beginShelfSelection()
+        store.selectAllShelfShots()
+        XCTAssertNotNil(store.selectedBatch)
+        XCTAssertTrue(store.copyShelfSelection())
+        let batchNotice = try XCTUnwrap(store.statusNotice)
+        XCTAssertEqual(batchNotice.kind, .success)
+        XCTAssertEqual(batchNotice.title, "Copied")
+        XCTAssertTrue(batchNotice.message.hasPrefix("2 shots copied."), batchNotice.message)
+
+        XCTAssertTrue(store.copyCapture(first.id))
+        let singleNotice = try XCTUnwrap(store.statusNotice)
+        XCTAssertEqual(singleNotice.kind, .success)
+        XCTAssertEqual(singleNotice.title, "Copied")
+        XCTAssertEqual(singleNotice.message, "First shot copied.")
+    }
+
     func testExportNoticeRetainsItsRevealDestinationEvenAfterExpiry() {
         let folder = URL(fileURLWithPath: "/tmp/NotchShot test export", isDirectory: true)
-        let notice = StatusNotice(message: "Exported to NotchShot test export.", revealURL: folder,
-                                  createdAt: Date(timeIntervalSince1970: 1_800_000_000))
+        let notice = StatusNotice(kind: .success, title: "Exported", message: "Exported to NotchShot test export.",
+                                  revealURL: folder, createdAt: Date(timeIntervalSince1970: 1_800_000_000))
         XCTAssertEqual(notice.title, "Exported")
         XCTAssertEqual(notice.revealURL, folder)
         XCTAssertTrue(notice.isExpired(at: notice.expiresAt.addingTimeInterval(1)))
@@ -149,15 +159,9 @@ final class StatusNoticeTests: XCTestCase {
 
     @MainActor
     private func makeFixture() -> (store: CaptureStore, clipboard: NSPasteboard, sound: NoticeSoundSpy) {
-        let suite = "NotchShotStatusNoticeTests-\(UUID())"
-        let preferences = UserDefaults(suiteName: suite)!
+        let (preferences, clipboard) = isolatedStoreDependencies()
         preferences.set(false, forKey: "collapseAfterCopy")
-        let clipboard = NSPasteboard(name: .init(suite))
         let sound = NoticeSoundSpy()
-        addTeardownBlock {
-            preferences.removePersistentDomain(forName: suite)
-            clipboard.releaseGlobally()
-        }
         let store = CaptureStore(preferences: preferences, captureSound: NoticeSoundSpy(), clipboard: clipboard, copySound: sound)
         return (store, clipboard, sound)
     }
@@ -167,5 +171,6 @@ final class StatusNoticeTests: XCTestCase {
 private final class NoticeSoundSpy: CaptureSoundPlaying, CopySoundPlaying {
     var playCount = 0
     func play() { playCount += 1 }
+    func select(_ choice: CaptureShutterSound) {}
     func setVolume(_ volume: Float) {}
 }

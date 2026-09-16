@@ -7,6 +7,8 @@ enum AssistedPasteResult: Equatable {
     case eventsSent
     case cancelled(String)
     case unavailable(String)
+    /// The sequence stopped and the original clipboard could not be put back.
+    case failed(String)
 }
 
 @MainActor
@@ -330,7 +332,7 @@ final class AssistedPasteService: AssistedPasteServing {
         }
         if didStageClipboard, !write(originalRepresentations) {
             finish(restoringClipboard: false)
-            onResult?(.cancelled("Could not restore the rich shot. Copy the shot again to retry."))
+            onResult?(.failed("Could not restore the rich shot. Copy the shot again to retry."))
             return
         }
         let token = ownedChangeCount

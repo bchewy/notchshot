@@ -86,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: configuration) { _, error in
             Task { @MainActor in
                 if let error {
-                    self.store.statusMessage = "Could not reopen: \(error.localizedDescription)"
+                    self.store.reportError("Could not reopen: \(error.localizedDescription)")
                     self.configureCaptureShortcut()
                     self.configureBothShift()
                 } else { NSApp.terminate(nil) }
@@ -106,7 +106,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.shortcutAvailable = result.isSuccess
         if !result.isSuccess {
             store.shortcutError = result.diagnostic
-            store.statusMessage = "\(store.captureShortcutLabel) is unavailable. Choose another shortcut in settings."
+            store.reportError("\(store.captureShortcutLabel) is unavailable. Choose another shortcut in settings.")
         }
     }
 

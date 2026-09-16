@@ -96,7 +96,7 @@ final class ShotRemovalTests: XCTestCase {
         store.page = .settings
         store.pendingCapture = incoming
         store.isCapturing = true
-        store.statusMessage = "Reading accessibility text…"
+        store.report(.info, "Capturing", "Reading accessibility text…")
         var dismissals = 0
         store.onDismissCard = { dismissals += 1 }
 

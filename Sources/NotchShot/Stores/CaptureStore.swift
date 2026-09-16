@@ -146,14 +146,8 @@ final class CaptureStore {
         didSet { if oldValue != selectedID { cancelCopyCollapse() } }
     }
     var activeAppName = "your active app"
-    var statusMessage: String? {
-        didSet {
-            if let message = statusMessage, !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                statusNotice = StatusNotice(message: message)
-            } else { statusNotice = nil }
-        }
-    }
     private(set) var statusNotice: StatusNotice?
+    var statusMessage: String? { statusNotice?.message }
     var accessibilityGranted = false
     var screenRecordingGranted = false
     var shortcutAvailable = true
@@ -259,8 +253,9 @@ final class CaptureStore {
         self.assistedPaste.onResult = { [weak self] result in
             switch result {
             case .eventsSent: break
-            case .cancelled(let reason): self?.statusMessage = reason
-            case .unavailable(let reason): self?.statusMessage = reason
+            case .cancelled(let reason): self?.report(.info, "Paste assistance", reason)
+            case .unavailable(let reason): self?.report(.info, "Paste assistance", reason)
+            case .failed(let reason): self?.reportError(reason)
             }
         }
     }
@@ -326,9 +321,18 @@ final class CaptureStore {
     }
     var hasAvailableCaptureShortcut: Bool { usesBothShiftForCaptureHint || shortcutAvailable }
 
+    /// Feedback shown in the notch. The producer names the kind and title, so
+    /// rewording a message can never change how long it stays or how it looks.
+    func report(_ kind: StatusNotice.Kind, _ title: String, _ message: String, revealURL: URL? = nil) {
+        statusNotice = StatusNotice(kind: kind, title: title, message: message, revealURL: revealURL)
+    }
+
     func reportError(_ message: String) {
-        statusMessage = message
-        statusNotice = StatusNotice(message: message, kind: .error)
+        report(.error, "Needs attention", message)
+    }
+
+    func clearStatus() {
+        statusNotice = nil
     }
 
     func beginShelfSelection() {
@@ -416,12 +420,12 @@ final class CaptureStore {
         let compact = batch.isShortened ? " Compact context; full text remains in your shots." : ""
         let unavailable = batch.omittedScreenshotNumbers.isEmpty ? "" :
             " Screenshots unavailable for shots \(batch.omittedScreenshotNumbers.map(String.init).joined(separator: ", ")); their text is included."
-        statusMessage = "\(label) copied.\(compact)\(unavailable)"
+        report(.success, "Copied", "\(label) copied.\(compact)\(unavailable)")
         if pasteImageThenText && !batch.imagePNGs.isEmpty {
             if captureShortcut == CaptureShortcut(keyCode: UInt16(kVK_ANSI_V), modifierFlags: .command) {
-                statusMessage = "\(label) copied. Choose a capture shortcut other than ⌘V to use paste assistance."
+                report(.success, "Copied", "\(label) copied. Choose a capture shortcut other than ⌘V to use paste assistance.")
             } else if assistedPaste.arm(batch: batch, clipboard: clipboard) {
-                statusMessage = "\(label) copied. Your next ⌘V pastes the screenshots in order, then their context. Wait for pasting to finish.\(compact)\(unavailable)"
+                report(.success, "Copied", "\(label) copied. Your next ⌘V pastes the screenshots in order, then their context. Wait for pasting to finish.\(compact)\(unavailable)")
             }
         }
         confirmManualCopy()
@@ -467,7 +471,7 @@ final class CaptureStore {
         candidate.save(to: preferences)
         shortcutAvailable = true
         shortcutError = nil
-        statusMessage = "Capture shortcut set to \(candidate.displayString)."
+        report(.success, "Shortcut saved", "Capture shortcut set to \(candidate.displayString).")
     }
 
     func resetCaptureShortcut() {
@@ -522,13 +526,13 @@ final class CaptureStore {
         assistedPaste.cancel()
         updateTarget(NSWorkspace.shared.frontmostApplication)
         guard let target = lastExternalTarget else {
-            statusMessage = "Open an app window, then press \(captureHintLabel) to capture it."
+            report(.info, "Open an app", "Open an app window, then press \(captureHintLabel) to capture it.")
             showShelf()
             return
         }
         refreshPermissions()
         guard accessibilityGranted || screenRecordingGranted else {
-            statusMessage = "Enable the permissions below, then capture your app."
+            report(.info, "Set up capture", "Enable the permissions below, then capture your app.")
             showCaptureSettings()
             return
         }
@@ -542,7 +546,7 @@ final class CaptureStore {
         // A window capture excludes our overlay. Keep the notch where the user
         // left it rather than closing and reopening it around every capture.
         if isExpanded && openShelfAfterCapture { page = .shelf }
-        statusMessage = nil
+        clearStatus()
         let revision = historyRevision
         captureRevision += 1
         let request = captureRevision
@@ -594,7 +598,7 @@ final class CaptureStore {
         if captures.isEmpty && page == .detail { page = .shelf }
         // Removing one saved shot must not invalidate another capture/import
         // in flight, move away from surviving shots, or clear the rest of the session.
-        statusMessage = "Removed \(removed.appName) shot."
+        report(.success, "Removed", "Removed \(removed.appName) shot.")
     }
 
     func clearHistory() {
@@ -603,7 +607,7 @@ final class CaptureStore {
         captures.removeAll()
         selectedID = nil
         page = .shelf
-        statusMessage = "Session captures cleared."
+        report(.success, "Cleared", "Session captures cleared.")
     }
 
     func refreshPermissions() {
@@ -673,10 +677,13 @@ final class CaptureStore {
         if !preserveNavigation { page = .shelf }
         if expandShelf { isExpanded = true }
         isDropTargeted = false
-        statusMessage = capture.bundleIdentifier.isEmpty
+        let imported = capture.bundleIdentifier.isEmpty
+        let copied = lastAutoCopiedID == capture.id
+        let summary = imported
             ? "Added \(capture.windowTitle) to your shelf."
             : "Captured \(capture.appName) · \(capture.elementCount) accessibility elements"
-        if lastAutoCopiedID == capture.id { statusMessage? += " · copied" }
+        report(.success, copied ? "Copied" : (imported ? "Added" : "Captured"),
+               copied ? summary + " · copied" : summary)
     }
 
     private func scheduleLanding() {
@@ -770,7 +777,7 @@ final class CaptureStore {
             let revision = historyRevision
             isImporting = true
             showShelf()
-            statusMessage = "Adding dropped Appshot…"
+            report(.info, "Adding…", "Adding dropped Appshot…")
             Task {
                 defer { isImporting = false }
                 do {
@@ -808,7 +815,7 @@ final class CaptureStore {
         if let tiff = NSImage(data: png)?.tiffRepresentation { item.setData(tiff, forType: .tiff) }
         clipboard.clearContents()
         let success = clipboard.writeObjects([item])
-        statusMessage = success ? "Screenshot copied." : "Could not copy the screenshot."
+        if success { report(.success, "Copied", "Screenshot copied.") } else { reportError("Could not copy the screenshot.") }
         if success { confirmManualCopy() }
     }
     func copyText() {
@@ -834,7 +841,7 @@ final class CaptureStore {
     func copyCapture(_ id: UUID) -> Bool {
         guard let capture = captures.first(where: { $0.id == id }) else { return false }
         let success = writeCaptureToClipboard(capture)
-        statusMessage = success ? "\(capture.appName) shot copied." : "Could not copy the capture."
+        if success { report(.success, "Copied", "\(capture.appName) shot copied.") } else { reportError("Could not copy the capture.") }
         if success { armAssistedPaste(for: capture); confirmManualCopy() }
         return success
     }
@@ -845,10 +852,10 @@ final class CaptureStore {
         guard autoCopyCapture, !isCapturing, lastAutoCopiedID != capture.id else { return }
         if writeCaptureToClipboard(capture) {
             lastAutoCopiedID = capture.id
-            statusMessage = "\(capture.appName) shot copied."
+            report(.success, "Copied", "\(capture.appName) shot copied.")
             armAssistedPaste(for: capture)
             playCopySound()
-        } else { statusMessage = "Could not copy the capture." }
+        } else { reportError("Could not copy the capture.") }
     }
 
     private func writeCaptureToClipboard(_ capture: CaptureResult) -> Bool {
@@ -861,11 +868,11 @@ final class CaptureStore {
     private func armAssistedPaste(for capture: CaptureResult) {
         guard pasteImageThenText, capture.pngData != nil else { return }
         guard captureShortcut != CaptureShortcut(keyCode: UInt16(kVK_ANSI_V), modifierFlags: .command) else {
-            statusMessage = "Shot copied. Choose a capture shortcut other than ⌘V to use Paste image, then text."
+            report(.success, "Copied", "Shot copied. Choose a capture shortcut other than ⌘V to use Paste image, then text.")
             return
         }
         if assistedPaste.arm(capture: capture, clipboard: clipboard) {
-            statusMessage = "Shot copied. Your next ⌘V pastes the image, then its text."
+            report(.success, "Copied", "Shot copied. Your next ⌘V pastes the image, then its text.")
         }
     }
     private func copy(_ text: String, message: String) {
@@ -873,7 +880,7 @@ final class CaptureStore {
         assistedPaste.cancel()
         clipboard.clearContents()
         let success = clipboard.setString(text, forType: .string)
-        statusMessage = success ? message : "Could not copy text."
+        if success { report(.success, "Copied", message) } else { reportError("Could not copy text.") }
         if success { confirmManualCopy() }
     }
 
@@ -931,11 +938,9 @@ final class CaptureStore {
                 guard response == .OK, let directory = panel.url else { return }
                 do {
                     let folder = try ExportService.export(capture, to: directory)
-                    let message = "Exported to \(folder.lastPathComponent)."
-                    self.statusMessage = message
-                    self.statusNotice = StatusNotice(message: message, revealURL: folder)
+                    self.report(.success, "Exported", "Exported to \(folder.lastPathComponent).", revealURL: folder)
                     NSWorkspace.shared.activateFileViewerSelecting([folder])
-                } catch { self.statusMessage = "Export failed: \(error.localizedDescription)" }
+                } catch { self.reportError("Export failed: \(error.localizedDescription)") }
             }
         }
     }
