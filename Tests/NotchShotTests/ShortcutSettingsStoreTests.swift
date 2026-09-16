@@ -108,7 +108,7 @@ final class ShortcutSettingsStoreTests: XCTestCase {
             store.isRecordingShortcut = true
             store.captureFrontmost()
             XCTAssertFalse(store.isCapturing)
-            XCTAssertNil(store.statusMessage)
+            XCTAssertNil(store.statusNotice?.message)
             store.showingSettings = false
             XCTAssertFalse(store.isRecordingShortcut)
             store.showingSettings = true

@@ -75,7 +75,7 @@ final class CapturePasteSettingsTests: XCTestCase {
         XCTAssertTrue(store.copyCapture(capture.id))
         XCTAssertTrue(spy.armed.isEmpty)
         XCTAssertNotNil(board.data(forType: .rtfd))
-        XCTAssertTrue(store.statusMessage?.contains("capture shortcut other than ⌘V") == true)
+        XCTAssertTrue(store.statusNotice?.message?.contains("capture shortcut other than ⌘V") == true)
     }
 
     @MainActor

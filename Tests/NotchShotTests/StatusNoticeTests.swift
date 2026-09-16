@@ -39,20 +39,20 @@ final class StatusNoticeTests: XCTestCase {
         let fixture = makeFixture()
         let store = fixture.store
         defer { store.stop() }
-        store.report(.success, "Copied", "Screenshot copied.")
+        store.report(.success, "Copied", message: "Screenshot copied.")
         let first = try XCTUnwrap(store.statusNotice)
-        store.report(.success, "Copied", "Screenshot copied.")
+        store.report(.success, "Copied", message: "Screenshot copied.")
         let second = try XCTUnwrap(store.statusNotice)
         XCTAssertNotEqual(second.id, first.id, "The same action repeated should replay its confirmation.")
         XCTAssertEqual(second.message, first.message)
         XCTAssertGreaterThanOrEqual(second.createdAt, first.createdAt)
         XCTAssertGreaterThanOrEqual(second.expiresAt, first.expiresAt)
-        XCTAssertEqual(store.statusMessage, "Screenshot copied.")
+        XCTAssertEqual(store.statusNotice?.message, "Screenshot copied.")
 
         store.clearStatus()
         XCTAssertNil(store.statusNotice)
-        XCTAssertNil(store.statusMessage)
-        store.report(.success, "Copied", "Text copied with its source labels.")
+        XCTAssertNil(store.statusNotice?.message)
+        store.report(.success, "Copied", message: "Text copied with its source labels.")
         XCTAssertNotNil(store.statusNotice)
         XCTAssertEqual(store.page, .shelf)
         XCTAssertFalse(store.isExpanded)
@@ -71,7 +71,7 @@ final class StatusNoticeTests: XCTestCase {
         XCTAssertEqual(notice.kind, .error)
         XCTAssertEqual(notice.title, "Needs attention")
         XCTAssertEqual(notice.message, message)
-        XCTAssertEqual(store.statusMessage, message)
+        XCTAssertEqual(store.statusNotice?.message, message)
         XCTAssertEqual(store.page, .settings)
         XCTAssertTrue(store.isExpanded)
     }
@@ -171,6 +171,5 @@ final class StatusNoticeTests: XCTestCase {
 private final class NoticeSoundSpy: CaptureSoundPlaying, CopySoundPlaying {
     var playCount = 0
     func play() { playCount += 1 }
-    func select(_ choice: CaptureShutterSound) {}
     func setVolume(_ volume: Float) {}
 }

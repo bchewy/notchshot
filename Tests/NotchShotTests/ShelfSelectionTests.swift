@@ -229,7 +229,7 @@ final class ShelfSelectionTests: XCTestCase {
         XCTAssertTrue(f.store.copyShelfSelection())
         XCTAssertEqual(f.board.string(forType: .string), batch.contextText)
         XCTAssertNil(f.board.data(forType: .png))
-        XCTAssertTrue(f.store.statusMessage!.contains("Screenshots unavailable for shots 1"))
+        XCTAssertTrue(f.store.statusNotice?.message!.contains("Screenshots unavailable for shots 1"))
     }
 
     @MainActor

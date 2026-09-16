@@ -7,7 +7,8 @@ enum AssistedPasteResult: Equatable {
     case eventsSent
     case cancelled(String)
     case unavailable(String)
-    /// The sequence stopped and the original clipboard could not be put back.
+    /// Assistance could not be armed after a copy, or the sequence stopped and
+    /// the original clipboard could not be put back. Shown as an error.
     case failed(String)
 }
 
@@ -179,7 +180,7 @@ final class AssistedPasteService: AssistedPasteServing {
         generation = UUID()
         guard environment.startMonitoring() else {
             finish(restoringClipboard: false)
-            onResult?(.unavailable("Paste assistance is unavailable. The rich shot is still on the clipboard."))
+            onResult?(.failed("Paste assistance is unavailable. The rich shot is still on the clipboard."))
             return false
         }
         if startPolling { beginPolling(generation: generation) }
