@@ -176,7 +176,8 @@ final class CaptureStore {
     @ObservationIgnored private var lastExternalTarget: CaptureTarget?
     @ObservationIgnored private var activationObserver: NSObjectProtocol?
     @ObservationIgnored private var permissionTimer: Timer?
-    @ObservationIgnored private let captureService = CaptureService()
+    @ObservationIgnored private let captureService: any CaptureServing
+    @ObservationIgnored private var captureTask: Task<Void, Never>?
     @ObservationIgnored private var historyRevision = 0
     @ObservationIgnored private var landingTask: Task<Void, Never>?
     @ObservationIgnored private var landingRevision = 0
@@ -215,8 +216,10 @@ final class CaptureStore {
          copySound: (any CopySoundPlaying)? = nil,
          copyCollapseDelay: Duration = .milliseconds(180),
          assistedPaste: (any AssistedPasteServing)? = nil,
-         idleSchedule: @escaping NotchIdleTimer.Schedule = NotchIdleTimer.scheduleTask) {
+         idleSchedule: @escaping NotchIdleTimer.Schedule = NotchIdleTimer.scheduleTask,
+         captureService: (any CaptureServing)? = nil) {
         self.preferences = preferences
+        self.captureService = captureService ?? CaptureService()
         self.captureSound = captureSound ?? CaptureSoundService()
         self.clipboard = clipboard
         self.copySound = copySound ?? CopySoundService()
@@ -486,11 +489,14 @@ final class CaptureStore {
     func start() {
         idleTimerStopped = false
         refreshAutoCollapse()
-        updateTarget(NSWorkspace.shared.frontmostApplication)
+        updateTarget(captureService.frontmostTarget())
         refreshPermissions()
-        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] notification in
-            let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-            Task { @MainActor in self?.updateTarget(app); self?.refreshPermissions() }
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                self.updateTarget(self.captureService.frontmostTarget())
+                self.refreshPermissions()
+            }
         }
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -511,20 +517,21 @@ final class CaptureStore {
         cancelCopyCollapse()
         isRecordingShortcut = false
         cancelLanding()
+        cancelCapture()
         permissionTimer?.invalidate()
         if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
     }
 
-    private func updateTarget(_ app: NSRunningApplication?) {
-        guard let app, app.processIdentifier != ProcessInfo.processInfo.processIdentifier, app.activationPolicy == .regular else { return }
-        lastExternalTarget = CaptureTarget(pid: app.processIdentifier, appName: app.localizedName ?? "Application", bundleIdentifier: app.bundleIdentifier ?? "")
-        activeAppName = lastExternalTarget?.appName ?? "your active app"
+    private func updateTarget(_ target: CaptureTarget?) {
+        guard let target else { return }
+        lastExternalTarget = target
+        activeAppName = target.appName
     }
 
     func captureFrontmost() {
         guard !isCapturing, !isPresentingExport, !isImporting, !isDraggingCard, !isRecordingShortcut else { return }
         assistedPaste.cancel()
-        updateTarget(NSWorkspace.shared.frontmostApplication)
+        updateTarget(captureService.frontmostTarget())
         guard let target = lastExternalTarget else {
             report(.info, "Open an app", "Open an app window, then press \(captureHintLabel) to capture it.")
             showShelf()
@@ -551,36 +558,51 @@ final class CaptureStore {
         captureRevision += 1
         let request = captureRevision
         var sounded = false
-        Task {
+        captureTask = Task {
+            let outcome: Result<CaptureResult, Error>
             do {
-                let result = try await captureService.capture(target: target) { [weak self] partial in
-                    guard let self, revision == self.historyRevision,
+                outcome = .success(try await captureService.capture(target: target) { [weak self] partial in
+                    guard let self, request == self.captureRevision, revision == self.historyRevision,
                           self.dismissedCaptureRevision != request else { return }
                     self.pendingCapture = partial
                     if self.arrivalSuppressedRevision != request { self.onPresentCard?(partial) }
                     if !sounded { self.playCaptureSound(); sounded = true }
-                }
-                isCapturing = false
-                guard revision == historyRevision else { return }
+                })
+            } catch { outcome = .failure(error) }
+            // A cancelled request has already released the busy flag, and a
+            // newer request may own it now.
+            guard request == captureRevision else { return }
+            isCapturing = false
+            captureTask = nil
+            guard revision == historyRevision else { return }
+            switch outcome {
+            case .success(let result):
                 guard dismissedCaptureRevision != request else { return }
                 pendingCapture = result
                 autoCopyCompletedCapture(result)
                 if arrivalSuppressedRevision != request { onPresentCard?(result) }
                 if !sounded { playCaptureSound() }
                 scheduleLanding()
-            } catch {
-                isCapturing = false
-                if revision == historyRevision {
-                    dismissPendingCapture()
-                    reportError(error.localizedDescription)
-                    if arrivalSuppressedRevision != request {
-                        if accessibilityGranted || screenRecordingGranted { showShelf() }
-                        else { showCaptureSettings() }
-                    }
+            case .failure(let error):
+                dismissPendingCapture()
+                reportError(error.localizedDescription)
+                if arrivalSuppressedRevision != request {
+                    if accessibilityGranted || screenRecordingGranted { showShelf() }
+                    else { showCaptureSettings() }
                 }
             }
             refreshPermissions()
         }
+    }
+
+    /// Clearing the shelf or stopping the store abandons a capture in flight
+    /// instead of letting it finish, hold its PNG, and block the next capture.
+    /// Bumping the revision makes the abandoned task's callbacks stale.
+    private func cancelCapture() {
+        captureTask?.cancel()
+        captureTask = nil
+        captureRevision += 1
+        isCapturing = false
     }
 
     func toggleExpanded() {
@@ -603,6 +625,7 @@ final class CaptureStore {
 
     func clearHistory() {
         historyRevision += 1
+        cancelCapture()
         dismissPendingCapture()
         captures.removeAll()
         selectedID = nil
@@ -611,7 +634,7 @@ final class CaptureStore {
     }
 
     func refreshPermissions() {
-        let permissions = PermissionService.status()
+        let permissions = captureService.permissionStatus()
         accessibilityGranted = permissions.accessibility
         screenRecordingGranted = permissions.screenRecording
         onShortcutSettingsChanged?()

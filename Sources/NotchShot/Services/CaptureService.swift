@@ -26,8 +26,34 @@ enum CaptureServiceError: LocalizedError {
     }
 }
 
+/// Everything the store needs from the system to run a capture: which app is
+/// in front, what the user has permitted, and the capture itself. Tests stand
+/// in for ScreenCaptureKit, Accessibility, and the permission checks through it.
 @MainActor
-final class CaptureService {
+protocol CaptureServing: AnyObject {
+    func frontmostTarget() -> CaptureTarget?
+    func permissionStatus() -> PermissionStatus
+    func capture(target: CaptureTarget, onScreenshot: ((CaptureResult) -> Void)?) async throws -> CaptureResult
+}
+
+@MainActor
+final class CaptureService: CaptureServing {
+    func frontmostTarget() -> CaptureTarget? {
+        Self.target(for: NSWorkspace.shared.frontmostApplication)
+    }
+
+    func permissionStatus() -> PermissionStatus {
+        PermissionService.status()
+    }
+
+    /// Only another regular app can be a target; NotchShot's own panels never are.
+    static func target(for app: NSRunningApplication?) -> CaptureTarget? {
+        guard let app, app.processIdentifier != ProcessInfo.processInfo.processIdentifier,
+              app.activationPolicy == .regular else { return nil }
+        return CaptureTarget(pid: app.processIdentifier, appName: app.localizedName ?? "Application",
+                             bundleIdentifier: app.bundleIdentifier ?? "")
+    }
+
     /// A single-window screenshot plus the selected window's AX tree. No screen
     /// stream, system-wide tree, menu traversal, background capture, or network.
     func capture(target: CaptureTarget, onScreenshot: ((CaptureResult) -> Void)? = nil) async throws -> CaptureResult {
