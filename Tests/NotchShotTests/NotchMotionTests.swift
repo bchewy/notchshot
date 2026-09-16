@@ -11,7 +11,7 @@ final class NotchMotionTests: XCTestCase {
             throw XCTSkip("This native integration test requires WindowServer display access; the test process is headless or sandboxed.")
         }
         try XCTSkipIf(TestEnvironment.isContinuousIntegration,
-                      "Fails on the GitHub macOS runner with a runtime InvalidTransition error during the first native panel motion; verified locally with Xcode.")
+                      "Fails on the GitHub macOS runner with a runtime InvalidTransition error; runs locally under Xcode. Tracked in https://github.com/bchewy/notchshot/issues/2")
         let previousWindows = Set(NSApp.windows.map(ObjectIdentifier.init))
         let (preferences, clipboard) = isolatedStoreDependencies()
         let store = CaptureStore(preferences: preferences, clipboard: clipboard)
