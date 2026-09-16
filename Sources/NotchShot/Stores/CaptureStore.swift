@@ -298,13 +298,17 @@ final class CaptureStore {
         }
     }
 
+    /// Work the notch must not close under. Both collapse policies derive from
+    /// this one list, so a new busy state is added here and nowhere else.
+    private var isInteractionInProgress: Bool {
+        isCapturing || isImporting || isDropTargeted || isDraggingCard || isLandingCapture
+            || isRecordingShortcut || isPresentingExport || pendingCapture != nil || isPreparingBatch
+    }
+
     private func refreshAutoCollapse(restart: Bool = false) {
         let eligible = !idleTimerStopped && autoCollapseEnabled && isExpanded && notchSurfaceVisible
             && !pointerInsideNotch && !notchKeyboardFocused && !notchMenuTracking
-            && !notchMouseButtonDown && autoCollapseProtections.isEmpty
-            && !isCapturing && !isImporting && !isDropTargeted && !isDraggingCard
-            && !isLandingCapture && !isRecordingShortcut && !isPresentingExport && pendingCapture == nil
-            && !isPreparingBatch
+            && !notchMouseButtonDown && autoCollapseProtections.isEmpty && !isInteractionInProgress
         idleTimer?.update(eligible: eligible, delay: .seconds(autoCollapseDelay), restart: restart)
     }
 
@@ -874,9 +878,7 @@ final class CaptureStore {
     }
 
     private var canCollapseAfterCopy: Bool {
-        collapseAfterCopy && isExpanded && page != .settings && !isCapturing
-            && !isImporting && !isDropTargeted && !isDraggingCard && !isLandingCapture
-            && !isRecordingShortcut && !isPresentingExport && !isPreparingBatch && pendingCapture == nil
+        collapseAfterCopy && isExpanded && page != .settings && !isInteractionInProgress
     }
 
     private func confirmManualCopy() {
