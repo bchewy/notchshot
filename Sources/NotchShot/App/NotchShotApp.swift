@@ -32,7 +32,7 @@ struct NotchShotApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let store = CaptureStore()
+    let store = CaptureStore(preferences: .standard, clipboard: .general)
     private var panelController: NotchPanelController?
     private let shortcut = GlobalShortcutService()
     private let bothShift = BothShiftShortcutService()

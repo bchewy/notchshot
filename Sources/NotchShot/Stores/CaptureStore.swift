@@ -211,11 +211,13 @@ final class CaptureStore {
     @ObservationIgnored private var batchPreparationTask: Task<Void, Never>?
     @ObservationIgnored private var batchPreparationRevision = 0
 
-    init(preferences: UserDefaults = .standard,
+    /// Preferences and the pasteboard have no defaults so a test cannot reach
+    /// the real ones without saying so.
+    init(preferences: UserDefaults,
          landingPreviewDelay: Duration = .milliseconds(550),
          shelfPreparationDelay: Duration = .milliseconds(280),
          captureSound: (any CaptureSoundPlaying)? = nil,
-         clipboard: NSPasteboard = .general,
+         clipboard: NSPasteboard,
          copySound: (any CopySoundPlaying)? = nil,
          copyCollapseDelay: Duration = .milliseconds(180),
          assistedPaste: (any AssistedPasteServing)? = nil,

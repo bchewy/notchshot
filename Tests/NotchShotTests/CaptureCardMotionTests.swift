@@ -173,7 +173,8 @@ final class CaptureCardMotionTests: XCTestCase {
         _ = NSApplication.shared
         guard NotchGeometry.preferredScreen != nil else { throw XCTSkip("Requires WindowServer display access.") }
         let previousWindows = Set(NSApp.windows.map(ObjectIdentifier.init))
-        let store = CaptureStore()
+        let (preferences, clipboard) = isolatedStoreDependencies()
+        let store = CaptureStore(preferences: preferences, clipboard: clipboard)
         let controller = CaptureCardController(store: store, presentsWindow: false, reduceMotion: reduceMotion)
         let window = try XCTUnwrap(NSApp.windows.first {
             !previousWindows.contains(ObjectIdentifier($0)) && $0.title == "NotchShot capture preview"

@@ -11,7 +11,8 @@ final class NotchMotionTests: XCTestCase {
             throw XCTSkip("This native integration test requires WindowServer display access; the test process is headless or sandboxed.")
         }
         let previousWindows = Set(NSApp.windows.map(ObjectIdentifier.init))
-        let store = CaptureStore()
+        let (preferences, clipboard) = isolatedStoreDependencies()
+        let store = CaptureStore(preferences: preferences, clipboard: clipboard)
         let controller = NotchPanelController(store: store)
         defer { store.stop() }
         let window = try XCTUnwrap(NSApp.windows.first { !previousWindows.contains(ObjectIdentifier($0)) && $0.title == "NotchShot" })
@@ -52,7 +53,8 @@ final class NotchMotionTests: XCTestCase {
             throw XCTSkip("This native integration test requires WindowServer display access; the test process is headless or sandboxed.")
         }
         let previousWindows = Set(NSApp.windows.map(ObjectIdentifier.init))
-        let store = CaptureStore()
+        let (preferences, clipboard) = isolatedStoreDependencies()
+        let store = CaptureStore(preferences: preferences, clipboard: clipboard)
         store.isExpanded = true
         let controller = NotchPanelController(store: store)
         defer { store.stop() }

@@ -201,13 +201,12 @@ final class ShotRemovalTests: XCTestCase {
 
     @MainActor
     private func makeStore() -> CaptureStore {
-        let suite = "NotchShotRemovalTests-\(UUID())"
-        let preferences = UserDefaults(suiteName: suite)!
-        addTeardownBlock { preferences.removePersistentDomain(forName: suite) }
+        let (preferences, clipboard) = isolatedStoreDependencies()
         return CaptureStore(preferences: preferences,
                             landingPreviewDelay: .milliseconds(1),
                             shelfPreparationDelay: .milliseconds(1),
-                            captureSound: SilentRemovalTestSound())
+                            captureSound: SilentRemovalTestSound(),
+                            clipboard: clipboard)
     }
 
     private func makeCapture(_ name: String) -> CaptureResult {
