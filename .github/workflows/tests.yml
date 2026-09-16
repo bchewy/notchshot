@@ -1,0 +1,43 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift-test:
+    name: Build and test (macOS)
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcode-select -p
+          swift --version
+
+      - name: Build
+        run: swift build --disable-sandbox
+
+      - name: Test
+        run: swift test --disable-sandbox 2>&1 | tee test-output.log
+
+      - name: Test summary
+        if: always()
+        run: |
+          grep -E "Executed [0-9]+ tests" test-output.log | tail -1 || true
+          grep -E "XCTSkip|skipped" test-output.log | head -20 || true
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swift-test-log
+          path: test-output.log
+          retention-days: 14
