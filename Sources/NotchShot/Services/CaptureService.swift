@@ -57,6 +57,7 @@ final class CaptureService: CaptureServing {
     /// A single-window screenshot plus the selected window's AX tree. No screen
     /// stream, system-wide tree, menu traversal, background capture, or network.
     func capture(target: CaptureTarget, onScreenshot: ((CaptureResult) -> Void)? = nil) async throws -> CaptureResult {
+        try Task.checkCancellation()
         guard let app = NSRunningApplication(processIdentifier: target.pid), !app.isTerminated else {
             throw CaptureServiceError.targetClosed
         }
@@ -86,28 +87,60 @@ final class CaptureService: CaptureServing {
             result.warnings.append("The screenshot uses the app's frontmost standard window because its focused accessibility window is unavailable.")
         }
 
-        async let accessibility = readAccessibility(focusedWindow)
-        var image: CGImage?
-        if permissions.screenRecording {
-            if let selected {
-                do {
-                    let screenshot = try await screenshot(windowID: selected.id, pid: target.pid)
-                    image = screenshot.image
-                    result.sourceWindowFrame = screenshot.windowFrame
-                    if let image { result.pngData = Self.pngData(image) }
-                    if result.pngData == nil { result.warnings.append("The screenshot could not be encoded as PNG. Accessibility content is still available.") }
-                } catch {
-                    result.warnings.append("Screenshot unavailable: \(error.localizedDescription) The window may have closed, moved to another Space, or declined capture. Try again, or check Screen Recording access.")
-                }
-            } else {
-                result.warnings.append("The focused window could not be matched to a capturable window. Activate that window and capture again.")
-            }
-        } else {
+        if !permissions.screenRecording {
             result.warnings.append("Screen Recording access is off. Enable it in Settings to include a screenshot, then relaunch NotchShot if macOS asks.")
+        } else if selected == nil {
+            result.warnings.append("The focused window could not be matched to a capturable window. Activate that window and capture again.")
+        }
+        try Task.checkCancellation()
+        return try await captureContent(
+            initial: result,
+            readAccessibility: {
+                guard let focusedWindow else { return AccessibilityReadResult() }
+                return try await AccessibilityReader.read(window: focusedWindow)
+            },
+            screenshot: {
+                guard permissions.screenRecording, let selected else { return nil }
+                return try await self.screenshot(windowID: selected.id, pid: target.pid)
+            },
+            onScreenshot: onScreenshot
+        )
+    }
+
+    /// Runs the prepared window's production stages. Keeping preparation separate
+    /// also lets tests exercise cancellation without accessing another app or TCC.
+    func captureContent(
+        initial: CaptureResult,
+        readAccessibility: @escaping @Sendable () async throws -> AccessibilityReadResult,
+        screenshot: () async throws -> (image: CGImage, windowFrame: CGRect)?,
+        recognizeText: (CGImage) async throws -> String = OCRService.recognizeText,
+        onScreenshot: ((CaptureResult) -> Void)? = nil
+    ) async throws -> CaptureResult {
+        try Task.checkCancellation()
+        var result = initial
+        async let accessibility = readAccessibility()
+        var image: CGImage?
+        do {
+            try Task.checkCancellation()
+            if let screenshot = try await screenshot() {
+                try Task.checkCancellation()
+                image = screenshot.image
+                result.sourceWindowFrame = screenshot.windowFrame
+                if let image { result.pngData = Self.pngData(image) }
+                if result.pngData == nil { result.warnings.append("The screenshot could not be encoded as PNG. Accessibility content is still available.") }
+            }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            try Task.checkCancellation()
+            result.warnings.append("Screenshot unavailable: \(error.localizedDescription) The window may have closed, moved to another Space, or declined capture. Try again, or check Screen Recording access.")
         }
 
+        try Task.checkCancellation()
         if result.pngData != nil { onScreenshot?(result) }
-        let axResult = await accessibility
+        try Task.checkCancellation()
+        let axResult = try await accessibility
+        try Task.checkCancellation()
         result.axTree = axResult.tree
         result.accessibilityText = axResult.text
         result.warnings += axResult.warnings
@@ -116,7 +149,7 @@ final class CaptureService: CaptureServing {
         }
         // Chromium can expose toolbar controls before its document AX tree is
         // enabled. Do not mistake a large toolbar for captured page content.
-        let browserWithoutDocument = Self.isChromiumBrowser(target.bundleIdentifier)
+        let browserWithoutDocument = Self.isChromiumBrowser(result.bundleIdentifier)
             && !Self.containsWebContent(result.axTree)
         if browserWithoutDocument, !result.axTree.isEmpty {
             result.warnings.append("This browser exposed controls but no web document tree. Its accessibility support may still be loading; try another capture. NotchShot does not change browser settings.")
@@ -124,25 +157,28 @@ final class CaptureService: CaptureServing {
         // OCR is a local fallback only. It is never presented as accessibility text.
         if let image, result.accessibilityText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || result.elementCount < 5 || browserWithoutDocument {
             do {
-                result.ocrText = try await OCRService.recognizeText(in: image)
+                try Task.checkCancellation()
+                result.ocrText = try await recognizeText(image)
+                try Task.checkCancellation()
                 result.warnings.append("The accessibility tree was unavailable or limited; local OCR was run on the screenshot and is shown separately.")
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
+                try Task.checkCancellation()
                 result.warnings.append("Local text recognition failed: \(error.localizedDescription)")
             }
         }
+        try Task.checkCancellation()
         guard result.pngData != nil || !result.axTree.isEmpty || !result.accessibilityText.isEmpty else {
             throw CaptureServiceError.nothingCaptured(result.warnings.joined(separator: "\n\n"))
         }
         return result
     }
 
-    private func readAccessibility(_ snapshot: AccessibilityWindowSnapshot?) async -> AccessibilityReadResult {
-        guard let snapshot else { return AccessibilityReadResult() }
-        return await AccessibilityReader.read(window: snapshot)
-    }
-
     private func screenshot(windowID: UInt32, pid: Int32) async throws -> (image: CGImage, windowFrame: CGRect) {
+        try Task.checkCancellation()
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
+        try Task.checkCancellation()
         guard let window = content.windows.first(where: {
             $0.windowID == windowID && $0.owningApplication?.processID == pid
         }) else {
@@ -159,6 +195,7 @@ final class CaptureService: CaptureServing {
         configuration.captureResolution = .best
         configuration.shouldBeOpaque = false
         let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
+        try Task.checkCancellation()
         return (image, window.frame)
     }
 
