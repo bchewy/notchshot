@@ -306,19 +306,24 @@ final class NotchAutoCollapseTests: XCTestCase {
     }
 
     @MainActor
-    func testPointerPresenceDoesNotCancelSuccessfulCopyCollapse() async throws {
+    func testPointerPresenceDoesNotCancelSuccessfulCopyCollapse() {
         let fixture = makeFixture()
         defer { fixture.store.stop() }
         let shot = makeCapture("Copied")
         fixture.store.captures = [shot]
         fixture.store.isExpanded = true
         attention(fixture.store, pointerInside: true)
+        XCTAssertEqual(fixture.clock.activeCount, 0, "Pointer presence prevents an idle deadline.")
         XCTAssertTrue(fixture.store.copyCapture(shot.id))
         attention(fixture.store, pointerInside: true)
         fixture.store.noteNotchActivity() // Native mouseUp/keyUp from the same copy gesture.
+        XCTAssertEqual(fixture.clock.activeCount, 1, "The independent copy deadline remains scheduled.")
         XCTAssertEqual(fixture.clipboard.string(forType: .string), shot.clipboardText)
-        try await Task.sleep(for: .milliseconds(80))
+        fixture.clock.advance(by: .milliseconds(19))
+        XCTAssertTrue(fixture.store.isExpanded, "Copy feedback receives its full delay.")
+        fixture.clock.advance(by: .milliseconds(1))
         XCTAssertFalse(fixture.store.isExpanded, "The manual copy feedback delay remains independent of idle attention.")
+        XCTAssertEqual(fixture.clock.activeCount, 0)
         XCTAssertEqual(fixture.store.captures.map(\.id), [shot.id])
     }
 
@@ -357,6 +362,7 @@ final class NotchAutoCollapseTests: XCTestCase {
                            clock: VirtualNotchClock) -> CaptureStore {
         CaptureStore(preferences: preferences, captureSound: SilentIdleCaptureSound(), clipboard: clipboard,
                      copySound: SilentIdleCopySound(), copyCollapseDelay: .milliseconds(20),
+                     copyCollapseSchedule: clock.schedule,
                      idleSchedule: clock.schedule)
     }
 
