@@ -3,175 +3,219 @@ import XCTest
 @testable import NotchShot
 
 final class CaptureBatchTests: XCTestCase {
-    func testFullPreservesEveryOriginalSourceAndStableShotBoundaries() throws {
+    func testCaptureTimeIncompleteNoticeSurvivesFullAndCompactCopyAndCounting() {
+        var capture = fixture("Partial app", text: String(repeating: "retained tree ", count: 2_000))
+        capture.accessibilityTreeIncomplete = true
+        let full = CaptureBatch(captures: [capture], contextStyle: .full)
+        let compact = CaptureBatch(captures: [capture], contextStyle: .compact)
+        for batch in [full, compact] {
+            XCTAssertTrue(batch.contextText.contains("[Accessibility tree is incomplete:"))
+            XCTAssertTrue(batch.contextText.contains("retained tree"))
+        }
+        XCTAssertEqual(compact.originalCharacterCount, full.characterCount)
+        XCTAssertLessThanOrEqual(shotSections(compact)[0].count, CaptureBatch.maximumCompactCharactersPerShot)
+        XCTAssertTrue(compact.isShortened)
+        XCTAssertTrue(compact.contextText.hasSuffix(treeTruncation))
+    }
+
+    private let treeTruncation = "\n[Accessibility tree shortened to fit compact context; full tree retained in NotchShot.]"
+
+    func testFullPreservesExactTreesAndStableShotBoundariesWithoutOtherSources() {
         var first = fixture("Editor", text: "  Exact first line\n\nSecond\tline  ")
-        first.ocrText = "OCR and AX may overlap; this stays verbatim."
-        first.importedText = "Imported <markup> & text\n"
-        first.axTree = [AXNode(id: 1, role: "AXButton", roleDescription: "button", title: "Save")]
-        first.warnings = ["A capture limitation.\nWith another line."]
-        let second = fixture("Browser", text: "Another source")
+        first.accessibilityText = "FLAT TEXT MUST NOT BE COPIED"
+        first.ocrText = "OCR MUST NOT BE COPIED"
+        first.importedText = "IMPORTED TEXT MUST NOT BE COPIED"
+        first.warnings = ["CAPTURE NOTES MUST NOT BE COPIED"]
+        let second = fixture("Browser", text: "Another tree")
         let batch = CaptureBatch(captures: [first, second], contextStyle: .full)
 
-        XCTAssertTrue(batch.contextText.contains("--- Shot 1 of 2 ---\nScreenshot: none captured.\n\n" + first.contextText))
-        XCTAssertTrue(batch.contextText.hasSuffix("--- Shot 2 of 2 ---\nScreenshot: none captured.\n\n" + second.contextText))
+        XCTAssertEqual(batch.contextText,
+                       "# NotchShot — 2 shots · Full context\n\n"
+                       + "--- Shot 1 of 2 ---\nScreenshot: none captured.\n\n" + first.clipboardText
+                       + "\n\n--- Shot 2 of 2 ---\nScreenshot: none captured.\n\n" + second.clipboardText)
+        for excluded in [first.accessibilityText, first.ocrText, first.importedText, first.warnings[0]] {
+            XCTAssertFalse(batch.contextText.contains(excluded))
+        }
         XCTAssertFalse(batch.isShortened)
         XCTAssertEqual(batch.removedDuplicateLines, 0)
         XCTAssertEqual(batch.characterCount, batch.originalCharacterCount)
         XCTAssertEqual(batch.contextText.count, batch.characterCount)
+        XCTAssertTrue(first.contextText.contains(first.ocrText), "Detailed exports remain intact.")
     }
 
     func testCaptureIdentityDeduplicationPreservesFirstInstanceAndSuppliedOrder() {
         let first = fixture("First", text: "First original")
         let second = fixture("Second", text: "Second original")
         var duplicate = first
-        duplicate.accessibilityText = "A replacement must not displace the first instance."
+        duplicate.axTree[0].value = "A replacement must not displace the first instance."
         let batch = CaptureBatch(captures: [second, first, duplicate, second], contextStyle: .full)
 
         XCTAssertEqual(batch.captures.map(\.id), [second.id, first.id])
         XCTAssertTrue(batch.contextText.contains("First original"))
-        XCTAssertFalse(batch.contextText.contains(duplicate.accessibilityText))
+        XCTAssertFalse(batch.contextText.contains(duplicate.axTree[0].value))
     }
 
-    func testEightLongShotsShareBudgetAndEachRetainsAnIdentifiableExcerpt() {
+    func testEightLongShotsShareBudgetAndEachRetainsAnIdentifiableTreePrefix() {
         let captures = (1...8).map { fixture("App \($0)", text: "Unique beginning for shot \($0): " + String(repeating: "abcdefghij", count: 2_000)) }
         let batch = CaptureBatch(captures: captures, contextStyle: .compact)
 
-        XCTAssertLessThanOrEqual(batch.characterCount, 32_000)
+        XCTAssertLessThanOrEqual(batch.characterCount, CaptureBatch.maximumCompactCharacters)
         XCTAssertTrue(batch.isShortened)
         for index in 1...8 {
             XCTAssertTrue(batch.contextText.contains("--- Shot \(index) of 8 ---"))
             XCTAssertTrue(batch.contextText.contains("Unique beginning for shot \(index):"))
         }
-        let sections = batch.contextText.components(separatedBy: "--- Shot ").dropFirst()
+        let sections = shotSections(batch)
         XCTAssertEqual(sections.count, 8)
         for section in sections {
-            XCTAssertGreaterThan(section.count, 3_000, "A long early shot must not consume later shots’ allowance.")
-            XCTAssertLessThanOrEqual(section.count, 6_000)
-            XCTAssertTrue(section.contains("Text shortened to fit compact context"))
+            XCTAssertGreaterThan(section.count, 3_000, "An early shot must not consume later shots’ allowance.")
+            XCTAssertLessThanOrEqual(section.count, CaptureBatch.maximumCompactCharactersPerShot)
+            XCTAssertTrue(section.hasSuffix(treeTruncation))
         }
+        XCTAssertEqual(batch.characterCount, batch.contextText.count)
     }
 
-    func testSingleLongLineIsBoundedAndDisclosedWithoutMutatingOriginal() {
+    func testSingleLongAXValueIsBoundedAndDisclosedWithoutMutatingOriginal() {
         let capture = fixture("Editor", text: String(repeating: "x", count: 100_000))
         let batch = CaptureBatch(captures: [capture], contextStyle: .compact)
+        let section = shotSections(batch)[0]
 
-        let excerpt = batch.contextText.components(separatedBy: "--- Shot ").last ?? ""
-        XCTAssertLessThanOrEqual(excerpt.count, 6_000)
-        XCTAssertTrue(batch.contextText.contains("[Text shortened to fit compact context; full text retained in NotchShot.]"))
-        XCTAssertEqual(batch.captures[0].accessibilityText, capture.accessibilityText)
+        XCTAssertLessThanOrEqual(section.count, CaptureBatch.maximumCompactCharactersPerShot)
+        XCTAssertTrue(section.hasSuffix(treeTruncation))
+        XCTAssertEqual(batch.captures[0].axTree[0].value, capture.axTree[0].value)
         XCTAssertGreaterThan(batch.originalCharacterCount, batch.characterCount)
+        let clipboardPrefix = String(section.components(separatedBy: "\n\n")[1].dropLast(treeTruncation.count))
+        XCTAssertTrue(capture.clipboardText.hasPrefix(clipboardPrefix))
     }
 
-    func testDuplicateLineRemovalStaysWithinShotAndKeepsFirstLineFormatting() {
+    func testCompactPreservesRepeatedLinesAndNodesWithinAndAcrossShots() {
         let line = "  A meaningful repeated line about the same captured document.  "
-        let first = fixture("First", text: line + "\nA\tmeaningful repeated line about the same captured document.\nSave\nSave\n123\n123")
+        var first = fixture("First", text: line + "\n" + line + "\nSave\nSave\n123\n123")
+        first.axTree += [AXNode(id: 2, role: "AXButton", roleDescription: "button", title: "Save"),
+                         AXNode(id: 3, role: "AXButton", roleDescription: "button", title: "Save")]
         let second = fixture("Second", text: line)
         let batch = CaptureBatch(captures: [first, second], contextStyle: .compact)
 
-        XCTAssertEqual(batch.removedDuplicateLines, 1)
-        XCTAssertEqual(batch.contextText.components(separatedBy: line).count - 1, 2,
-                       "Shared text across shots must retain its separate provenance.")
-        XCTAssertTrue(batch.contextText.contains("Save\nSave\n123\n123"))
-        XCTAssertTrue(batch.contextText.contains("[Removed 1 repeated line within this source.]"))
-        XCTAssertTrue(batch.isShortened)
+        XCTAssertEqual(batch.removedDuplicateLines, 0)
+        XCTAssertEqual(batch.contextText.components(separatedBy: line).count - 1, 3)
+        XCTAssertTrue(batch.contextText.contains("button Save\nbutton Save"))
+        XCTAssertTrue(batch.contextText.contains(first.clipboardText))
+        XCTAssertTrue(batch.contextText.contains(second.clipboardText))
+        XCTAssertFalse(batch.isShortened)
     }
 
-    func testSourcePriorityAndOtherSourceOmissionsAreExplicitNotCrossSourceDeduplicated() {
-        var capture = fixture("Browser", text: "The accessibility source supplies the main readable context.")
-        capture.ocrText = capture.accessibilityText
-        capture.importedText = "An imported source must not silently blend into accessibility text."
+    func testCompactUsesOnlyTreeEvenWhenOtherSourcesAndWarningsArePresent() {
+        var capture = fixture("Browser", text: "TREE SOURCE")
+        capture.accessibilityText = "FLAT SOURCE"
+        capture.ocrText = "OCR SOURCE"
+        capture.importedText = "IMPORTED SOURCE"
+        capture.warnings = ["CAPTURE WARNING"]
         let batch = CaptureBatch(captures: [capture], contextStyle: .compact)
 
-        XCTAssertTrue(batch.contextText.contains("Accessibility text:\n" + capture.accessibilityText))
-        XCTAssertTrue(batch.contextText.contains("Additional sources omitted in compact context: Imported text, Text recognized from screenshot (OCR)"))
+        XCTAssertTrue(batch.contextText.contains(capture.clipboardText))
+        for excluded in [capture.accessibilityText, capture.ocrText, capture.importedText, capture.warnings[0]] {
+            XCTAssertFalse(batch.contextText.contains(excluded))
+        }
         XCTAssertEqual(batch.removedDuplicateLines, 0)
-        XCTAssertFalse(batch.contextText.contains(capture.importedText))
-        XCTAssertTrue(batch.isShortened)
+        XCTAssertFalse(batch.isShortened, "Excluded non-tree sources are not part of the clipboard contract.")
         XCTAssertEqual(batch.captures[0].importedText, capture.importedText)
     }
 
-    func testImportedAndOCRReadabilityFallbacksRetainSourceLabels() {
+    func testMissingTreeIsExplicitWithoutImportedOrOCRSubstitution() {
         var imported = fixture("Import", text: "")
         imported.importedText = "Imported text only"
         imported.ocrText = "Secondary OCR"
         var ocr = fixture("Image", text: "")
         ocr.ocrText = "OCR only"
-        let batch = CaptureBatch(captures: [imported, ocr], contextStyle: .compact)
-
-        XCTAssertTrue(batch.contextText.contains("Imported text:\nImported text only"))
-        XCTAssertTrue(batch.contextText.contains("Text recognized from screenshot (OCR):\nOCR only"))
-        XCTAssertTrue(batch.contextText.contains("Additional sources omitted in compact context: Text recognized from screenshot (OCR)"))
+        ocr.accessibilityText = "Flat source without a tree"
+        for style in BatchContextStyle.allCases {
+            let batch = CaptureBatch(captures: [imported, ocr], contextStyle: style)
+            XCTAssertTrue(batch.contextText.contains(imported.clipboardText))
+            XCTAssertTrue(batch.contextText.contains(ocr.clipboardText))
+            XCTAssertEqual(batch.contextText.components(separatedBy: "No accessibility tree was available for this shot.").count - 1, 2)
+            for excluded in [imported.importedText, imported.ocrText, ocr.ocrText, ocr.accessibilityText] {
+                XCTAssertFalse(batch.contextText.contains(excluded))
+            }
+            XCTAssertFalse(batch.isShortened)
+        }
     }
 
     func testUnicodeClippingRetainsCompleteGraphemeClusters() {
         let cluster = "👩🏽‍💻"
         let capture = fixture("日本語 📷", text: String(repeating: "写真" + cluster + "e\u{301}", count: 5_000))
         let batch = CaptureBatch(captures: [capture], contextStyle: .compact)
-        let body = batch.contextText.components(separatedBy: "Accessibility text:\n")[1]
-            .components(separatedBy: "\n[Text shortened")[0]
+        let body = batch.contextText.components(separatedBy: "text area, Value: ")[1]
+            .components(separatedBy: treeTruncation)[0]
 
-        XCTAssertLessThanOrEqual(batch.characterCount, 32_000)
+        XCTAssertLessThanOrEqual(batch.characterCount, CaptureBatch.maximumCompactCharacters)
         XCTAssertTrue(batch.isShortened)
         XCTAssertTrue(body.contains(cluster))
         XCTAssertTrue(body.allSatisfy { Set("写真" + cluster + "e\u{301}").contains($0) })
+        XCTAssertTrue(capture.axTree[0].value.hasPrefix(body))
         XCTAssertFalse(body.contains("�"))
     }
 
-    func testPathologicalMetadataWarningsAndTreeRemainBoundedAndMarked() {
-        var capture = fixture(String(repeating: "Camera", count: 3_000), text: String(repeating: "Document content ", count: 2_000))
+    func testPathologicalMetadataAndTreeStayBoundedWhileLaterShotNamesSurvive() {
+        var capture = fixture(String(repeating: "Camera", count: 3_000), text: "")
         capture.windowTitle = String(repeating: "Very long window ", count: 3_000)
-        capture.warnings = (1...50).map { "Capture note \($0): " + String(repeating: "detail ", count: 1_000) }
+        capture.warnings = [String(repeating: "Warnings are excluded. ", count: 10_000)]
         capture.axTree = (1...200).map { AXNode(id: $0, role: "AXLink", roleDescription: "link", title: "Useful link \($0)", url: "https://example.invalid/" + String(repeating: "path", count: 200)) }
-        let batch = CaptureBatch(captures: Array(repeating: capture, count: 8).enumerated().map { index, value in
-            var copy = value
+        let captures = (1...8).map { index in
+            var copy = capture
             copy.id = UUID()
-            copy.accessibilityText = "Unique shot \(index) " + copy.accessibilityText
+            copy.appName = "Unique shot \(index) " + copy.appName
             return copy
-        }, contextStyle: .compact)
+        }
+        let batch = CaptureBatch(captures: captures, contextStyle: .compact)
 
         XCTAssertEqual(batch.captures.count, 8)
-        XCTAssertLessThanOrEqual(batch.characterCount, 32_000)
-        XCTAssertTrue(batch.contextText.contains("…"))
-        XCTAssertTrue(batch.contextText.contains("Capture notes shortened"))
-        XCTAssertTrue(batch.contextText.contains("Accessibility controls and links (partial; full tree retained)"))
+        XCTAssertLessThanOrEqual(batch.characterCount, CaptureBatch.maximumCompactCharacters)
+        XCTAssertTrue(batch.contextText.contains("[App or window name shortened; full names retained in NotchShot.]"))
         XCTAssertTrue(batch.contextText.contains("Useful link 1"))
-        XCTAssertTrue(batch.contextText.contains("Unique shot 7"))
+        XCTAssertTrue(batch.contextText.contains("Unique shot 8"))
+        XCTAssertFalse(batch.contextText.contains("Warnings are excluded."))
         XCTAssertTrue(batch.isShortened)
+        for section in shotSections(batch) {
+            XCTAssertLessThanOrEqual(section.count, CaptureBatch.maximumCompactCharactersPerShot)
+            XCTAssertTrue(section.hasSuffix(treeTruncation))
+        }
     }
 
-    func testControlSummaryPreservesUsefulControlsAndDoesNotExposeProtectedFields() {
+    func testShortCompactTreePreservesHierarchyAndProtectedFields() {
         var capture = fixture("Form", text: "Form content")
         capture.axTree = [AXNode(id: 1, role: "AXGroup", roleDescription: "group", children: [
             AXNode(id: 2, role: "AXButton", roleDescription: "button", title: "Save changes"),
-            AXNode(id: 3, role: "AXLink", roleDescription: "link", title: "Documentation", url: "https://example.invalid/docs"),
-            AXNode(id: 4, role: "AXTextField", roleDescription: "text field", title: "secret title", value: "secret value", isProtected: true),
-            AXNode(id: 5, role: "AXTextField", roleDescription: "text field", title: "Search", value: "Camera", isSettable: true)
+            AXNode(id: 3, role: "AXGroup", roleDescription: "group", children: [
+                AXNode(id: 4, role: "AXLink", roleDescription: "link", title: "Documentation", url: "https://example.invalid/docs"),
+                AXNode(id: 5, role: "AXTextField", roleDescription: "text field", title: "secret title", value: "secret value", help: "secret help", url: "secret URL", placeholder: "secret placeholder", isSettable: true, isProtected: true)
+            ]),
+            AXNode(id: 6, role: "AXTextField", roleDescription: "text field", title: "Search", value: "Camera", isSettable: true)
         ])]
-        let batch = CaptureBatch(captures: [capture], contextStyle: .compact)
-
-        XCTAssertTrue(batch.contextText.contains("button: Save changes"))
-        XCTAssertTrue(batch.contextText.contains("Documentation — https://example.invalid/docs"))
-        XCTAssertTrue(batch.contextText.contains("text field [protected]"))
-        XCTAssertTrue(batch.contextText.contains("text field (settable): Search, Value: Camera"))
-        XCTAssertFalse(batch.contextText.contains("secret"))
-        XCTAssertTrue(batch.contextText.contains("partial; full tree retained"))
+        for style in BatchContextStyle.allCases {
+            let batch = CaptureBatch(captures: [capture], contextStyle: style)
+            XCTAssertTrue(batch.contextText.contains(capture.clipboardText))
+            XCTAssertTrue(batch.contextText.contains("group\n\tbutton Save changes\n\tgroup\n\t\tlink Documentation"))
+            XCTAssertTrue(batch.contextText.contains("\t\ttext field (settable) [protected]"))
+            XCTAssertTrue(batch.contextText.contains("\n\ttext field (settable) Search, Value: Camera"))
+            XCTAssertFalse(batch.contextText.contains("secret"))
+            XCTAssertFalse(batch.isShortened)
+        }
     }
 
-    func testEmptyAndTextOnlyBatchesDoNotInventImagesOrContent() {
+    func testEmptyAndTreelessBatchesDoNotInventImagesOrTreeContent() {
         for style in BatchContextStyle.allCases {
             let empty = CaptureBatch(captures: [], contextStyle: style)
             XCTAssertTrue(empty.contextText.isEmpty)
             XCTAssertTrue(empty.imagePNGs.isEmpty)
             XCTAssertEqual(empty.characterCount, 0)
+            XCTAssertEqual(empty.originalCharacterCount, 0)
             XCTAssertFalse(empty.isShortened)
+            let capture = fixture("Empty window", text: "")
+            let batch = CaptureBatch(captures: [capture], contextStyle: style)
+            XCTAssertTrue(batch.imagePNGs.isEmpty)
+            XCTAssertTrue(batch.contextText.contains(capture.clipboardText))
+            XCTAssertFalse(batch.isShortened)
         }
-        let capture = fixture("Plain app", text: "A short complete readable excerpt.")
-        let batch = CaptureBatch(captures: [capture], contextStyle: .compact)
-        XCTAssertTrue(batch.imagePNGs.isEmpty)
-        XCTAssertTrue(batch.contextText.contains(capture.accessibilityText))
-        XCTAssertFalse(batch.isShortened)
-        let metadataOnly = CaptureBatch(captures: [fixture("Empty window", text: "")], contextStyle: .compact)
-        XCTAssertTrue(metadataOnly.contextText.contains("No readable text was captured."))
     }
 
     func testImageBytesAndOrderRemainUnmodifiedForClipboardValidation() {
@@ -202,7 +246,7 @@ final class CaptureBatchTests: XCTestCase {
     }
 
     func testUnavailableImagesAreDisclosedWithoutChangingOriginalCaptureOrRenumberingOthers() {
-        var first = fixture("Invalid image", text: "Its text must remain available")
+        var first = fixture("Invalid image", text: "Its tree must remain available")
         first.pngData = Data([1, 2, 3])
         let textOnly = fixture("Text only", text: "No image was captured")
         var third = fixture("Valid image", text: "Third context")
@@ -217,13 +261,12 @@ final class CaptureBatchTests: XCTestCase {
             XCTAssertTrue(batch.contextText.contains("--- Shot 1 of 3 ---\nScreenshot: unavailable; text retained."))
             XCTAssertTrue(batch.contextText.contains("--- Shot 2 of 3 ---\nScreenshot: none captured."))
             XCTAssertTrue(batch.contextText.contains("--- Shot 3 of 3 ---\nScreenshot source: Shot 3."))
-            XCTAssertTrue(batch.contextText.contains(first.accessibilityText))
-            if style == .full { XCTAssertTrue(batch.contextText.contains(first.contextText)) }
+            XCTAssertTrue(batch.contextText.contains(first.clipboardText))
         }
     }
 
-    func testStreamedFullCountMatchesExactContextWithEverySourceAndMultilineTree() {
-        var capture = fixture("\u{301}Camera 📷", text: "Source ends with a carriage return\r")
+    func testStreamedFullCountAndUnshortenedPrefixMatchExactMultilineUnicodeTrees() {
+        var capture = fixture("\u{301}Camera 📷", text: "Ignored flat text")
         capture.windowTitle = "\u{301}Window\r\nTitle"
         capture.importedText = "Imported e\u{301} and 👩🏽‍💻 text\r"
         capture.ocrText = "OCR source"
@@ -232,49 +275,111 @@ final class CaptureBatchTests: XCTestCase {
             AXNode(id: 2, role: "AXTextField", roleDescription: "field", title: "\u{301}Name\r\nsecond line", value: "value\nnext value", help: "Multiline\nhelp", url: "https://example.invalid", placeholder: "\u{301}placeholder", isSettable: true),
             AXNode(id: 3, role: "AXTextField", roleDescription: "protected field", title: "private", value: "private", isSettable: true, isProtected: true)
         ]), AXNode(id: 4, role: "AXLink", roleDescription: "link", title: "Name", value: "https://example.invalid", help: "Name", url: "https://example.invalid")]
-        let full = CaptureBatch(captures: [capture], contextStyle: .full)
-        let compact = CaptureBatch(captures: [capture], contextStyle: .compact)
+        var noTree = fixture("\u{301}Empty", text: "")
+        noTree.windowTitle = "Empty\r\nwindow"
+        let full = CaptureBatch(captures: [capture, noTree], contextStyle: .full)
+        let compact = CaptureBatch(captures: [capture, noTree], contextStyle: .compact)
         XCTAssertEqual(compact.originalCharacterCount, full.contextText.count)
+        XCTAssertTrue(compact.contextText.contains(capture.clipboardText))
+        XCTAssertTrue(compact.contextText.contains(noTree.clipboardText))
+        XCTAssertFalse(compact.isShortened)
     }
 
-    func testCompactStopsExaminingRepeatedInputAndClearlyDisclosesUnexaminedRemainder() {
-        let line = "This substantial line is deliberately repeated in a very long source.\n"
-        var capture = fixture("Imported source", text: "")
-        capture.importedText = String(repeating: line, count: 4_000) + "A final unique line beyond the examined prefix."
+    func testCompactRetainsHierarchyPrefixAndMarksUnexaminedLaterNodes() {
+        var capture = fixture("Hierarchy", text: "")
+        capture.axTree = [AXNode(id: 1, role: "AXGroup", roleDescription: "group", children: (1...2_000).map {
+            AXNode(id: $0 + 1, role: "AXButton", roleDescription: "button", title: "Repeated useful label")
+        })]
+        capture.axTree.append(AXNode(id: 3_000, role: "AXButton", roleDescription: "button", title: "Unique final node"))
         let batch = CaptureBatch(captures: [capture], contextStyle: .compact)
+        let section = shotSections(batch)[0]
+        let content = section.components(separatedBy: "\n\n")[1]
+        let prefix = String(content.dropLast(treeTruncation.count))
 
-        XCTAssertTrue(batch.contextText.contains("Remaining source not examined in compact context"))
-        XCTAssertFalse(batch.contextText.contains("A final unique line"))
-        XCTAssertLessThan(batch.removedDuplicateLines, 4_000,
-                          "The duplicate count must describe examined lines, not imply the whole source was inspected.")
-        XCTAssertGreaterThan(batch.removedDuplicateLines, 0)
-        XCTAssertLessThanOrEqual(batch.characterCount, 32_000)
-        XCTAssertEqual(batch.captures[0].importedText, capture.importedText)
+        XCTAssertTrue(capture.clipboardText.hasPrefix(prefix))
+        XCTAssertTrue(prefix.contains("group\n\tbutton Repeated useful label\n\tbutton Repeated useful label"))
+        XCTAssertTrue(section.hasSuffix(treeTruncation))
+        XCTAssertFalse(section.contains("Unique final node"))
+        XCTAssertEqual(batch.removedDuplicateLines, 0)
         XCTAssertTrue(batch.isShortened)
+        XCTAssertEqual(batch.captures[0].elementCount, capture.elementCount)
     }
 
-    func testLargeImportedSourcesKeepBoundedPreviewAndExactOriginalCount() {
-        let largeText = String(repeating: "A long imported source line. ", count: 346_000)
-        var first = fixture("Large first import", text: "")
-        var second = fixture("Large second import", text: "")
+    func testExactlyFilledShotHasNoTruncationUntilAnotherNodeExists() {
+        var capture = fixture("Boundary", text: "x")
+        let first = CaptureBatch(captures: [capture], contextStyle: .compact)
+        let additionalCharacters = CaptureBatch.maximumCompactCharactersPerShot - shotSections(first)[0].count
+        capture.axTree[0].value += String(repeating: "x", count: additionalCharacters)
+        let exact = CaptureBatch(captures: [capture], contextStyle: .compact)
+        XCTAssertEqual(shotSections(exact)[0].count, CaptureBatch.maximumCompactCharactersPerShot)
+        XCTAssertTrue(exact.contextText.contains(capture.clipboardText))
+        XCTAssertFalse(exact.isShortened)
+
+        capture.axTree.append(AXNode(id: 2, role: "AXButton", roleDescription: "button", title: "One more node"))
+        let overflow = CaptureBatch(captures: [capture], contextStyle: .compact)
+        XCTAssertEqual(shotSections(overflow)[0].count, CaptureBatch.maximumCompactCharactersPerShot)
+        XCTAssertTrue(overflow.contextText.hasSuffix(treeTruncation))
+        XCTAssertTrue(overflow.isShortened)
+        XCTAssertFalse(overflow.contextText.contains("One more node"))
+    }
+
+    func testLargeAXValuesKeepBoundedPreviewAndExactOriginalCount() {
+        let largeText = String(repeating: "A long accessibility value. ", count: 346_000)
+        var first = fixture("Large first tree", text: "x")
+        var second = fixture("Large second tree", text: "x")
         let baseline = CaptureBatch(captures: [first, second], contextStyle: .full).characterCount
-        first.importedText = largeText
-        second.importedText = largeText
+        first.axTree[0].value = largeText
+        second.axTree[0].value = largeText
         let start = ContinuousClock.now
         let batch = CaptureBatch(captures: [first, second], contextStyle: .compact)
         let elapsed = ContinuousClock.now - start
         print("CaptureBatch Compact benchmark: 2 × \(largeText.utf8.count) bytes in \(elapsed)")
 
-        XCTAssertEqual(batch.originalCharacterCount,
-                       baseline + 2 * ("\n\n## Imported text\n".count + largeText.count))
-        XCTAssertLessThanOrEqual(batch.characterCount, 32_000)
+        XCTAssertEqual(batch.originalCharacterCount, baseline + 2 * (largeText.count - 1))
+        XCTAssertLessThanOrEqual(batch.characterCount, CaptureBatch.maximumCompactCharacters)
         XCTAssertTrue(batch.contextText.contains("--- Shot 2 of 2 ---"))
-        XCTAssertTrue(batch.contextText.contains("Remaining source not examined in compact context"))
+        XCTAssertEqual(batch.contextText.components(separatedBy: treeTruncation).count - 1, 2)
+        XCTAssertTrue(batch.isShortened)
+    }
+
+    func testLargeExcludedSourcesDoNotChangeClipboardPayloadOrIdentity() {
+        var capture = fixture("Tree source", text: "Only this tree is copied")
+        let baseline = CaptureBatch(captures: [capture], contextStyle: .compact)
+        capture.accessibilityText = String(repeating: "Flat text ", count: 100_000)
+        capture.importedText = String(repeating: "Imported text ", count: 100_000)
+        capture.ocrText = String(repeating: "OCR text ", count: 100_000)
+        capture.warnings = [String(repeating: "Warning ", count: 100_000)]
+        let batch = CaptureBatch(captures: [capture], contextStyle: .compact)
+        XCTAssertEqual(batch.contextText, baseline.contextText)
+        XCTAssertEqual(batch.originalCharacterCount, baseline.originalCharacterCount)
+        XCTAssertEqual(batch.identity, baseline.identity)
+        XCTAssertFalse(batch.isShortened)
+    }
+
+    func testIdentityStillDependsOnStyleShotOrderAndImageBytes() {
+        var first = fixture("First", text: "First tree")
+        first.pngData = Data([1, 2, 3])
+        let second = fixture("Second", text: "Second tree")
+        let original = CaptureBatch(captures: [first, second], contextStyle: .compact)
+        XCTAssertEqual(original.identity, CaptureBatch(captures: [first, second], contextStyle: .compact).identity)
+        XCTAssertNotEqual(original.identity, CaptureBatch(captures: [second, first], contextStyle: .compact).identity)
+        XCTAssertNotEqual(original.identity, CaptureBatch(captures: [first, second], contextStyle: .full).identity)
+        first.pngData = Data([4, 5, 6])
+        XCTAssertNotEqual(original.identity, CaptureBatch(captures: [first, second], contextStyle: .compact).identity)
+    }
+
+    private func shotSections(_ batch: CaptureBatch) -> [String] {
+        let sections = batch.contextText.components(separatedBy: "--- Shot ").dropFirst()
+        return sections.enumerated().map { index, value in
+            "--- Shot " + (index == sections.count - 1 ? value : String(value.dropLast(2)))
+        }
     }
 
     private func fixture(_ app: String, text: String) -> CaptureResult {
         CaptureResult(date: Date(timeIntervalSince1970: 1_800_000_000), appName: app,
                       bundleIdentifier: "test.capture-batch", windowTitle: "Window for " + app,
-                      windowID: nil, accessibilityText: text)
+                      windowID: nil,
+                      axTree: text.isEmpty ? [] : [AXNode(id: 1, role: "AXTextArea", roleDescription: "text area", value: text)],
+                      accessibilityText: text)
     }
 }

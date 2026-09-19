@@ -58,6 +58,12 @@ final class CaptureStore {
         didSet { cancelCopyCollapse() }
     }
     var autoCollectCaptures = true
+    var theme: NotchTheme {
+        didSet { preferences.set(theme.rawValue, forKey: "notchTheme") }
+    }
+    var followActiveScreen: Bool {
+        didSet { preferences.set(followActiveScreen, forKey: "followActiveScreen") }
+    }
     var bothShiftEnabled: Bool {
         didSet {
             preferences.set(bothShiftEnabled, forKey: "bothShiftEnabled")
@@ -93,6 +99,14 @@ final class CaptureStore {
     }
     var autoCopyCapture: Bool {
         didSet { preferences.set(autoCopyCapture, forKey: "autoCopyCapture") }
+    }
+    var copyContent: CaptureCopyContent {
+        didSet {
+            guard oldValue != copyContent else { return }
+            preferences.set(copyContent.rawValue, forKey: "copyContent")
+            assistedPaste.cancel()
+            cancelCopyCollapse()
+        }
     }
     var pasteImageThenText: Bool {
         didSet {
@@ -228,6 +242,9 @@ final class CaptureStore {
         self.copyCollapseDelay = copyCollapseDelay
         batchContextStyle = preferences.string(forKey: "batchContextStyle")
             .flatMap(BatchContextStyle.init(rawValue:)) ?? .compact
+        theme = preferences.string(forKey: "notchTheme")
+            .flatMap(NotchTheme.init(rawValue:)) ?? .mint
+        followActiveScreen = preferences.object(forKey: "followActiveScreen") as? Bool ?? false
         captureShortcut = CaptureShortcut.load(from: preferences)
         // Preserve whether the optional gesture was enabled during upgrades,
         // then use its own key so an old preference cannot override new choices.
@@ -240,6 +257,8 @@ final class CaptureStore {
         autoCollapseEnabled = preferences.object(forKey: "autoCollapseEnabled") as? Bool ?? true
         idleDelaySeconds = Self.validAutoCollapseDelay(preferences.object(forKey: "autoCollapseDelay") as? Double ?? 3)
         autoCopyCapture = preferences.object(forKey: "autoCopyCapture") as? Bool ?? false
+        copyContent = preferences.string(forKey: "copyContent")
+            .flatMap(CaptureCopyContent.init(rawValue:)) ?? .screenshotAndTree
         pasteImageThenText = preferences.object(forKey: "pasteImageThenText") as? Bool ?? false
         openShelfAfterCapture = preferences.object(forKey: "openShelfAfterCapture") as? Bool ?? true
         soundVolume = Self.validSoundVolume(preferences.object(forKey: "captureSoundVolume") as? Double ?? 0.65)
@@ -300,6 +319,13 @@ final class CaptureStore {
     private var isInteractionInProgress: Bool {
         isCapturing || isImporting || isDropTargeted || isDraggingCard || isLandingCapture
             || isRecordingShortcut || isPresentingExport || pendingCapture != nil || isPreparingBatch
+    }
+
+    /// Keep the notch in place while its current interaction still owns it.
+    /// The controller checks the pointer against the panel's live bounds.
+    var shouldDeferScreenMove: Bool {
+        isInteractionInProgress || notchKeyboardFocused || notchMenuTracking
+            || notchMouseButtonDown || !autoCollapseProtections.isEmpty
     }
 
     private func refreshAutoCollapse(restart: Bool = false) {
@@ -411,7 +437,11 @@ final class CaptureStore {
         guard isSelectingShots, !isPreparingBatch, let batch = selectedBatch, !batch.captures.isEmpty else { return false }
         assistedPaste.cancel()
         // Finish all representation building before replacing the clipboard.
-        let item = CaptureClipboardService.makeItem(for: batch)
+        guard let item = CaptureClipboardService.makeItem(for: batch, content: copyContent) else {
+            cancelCopyCollapse()
+            reportError("No screenshots are available in the selected shots. Capture again with Screen Recording enabled, or choose AX tree in Settings.")
+            return false
+        }
         clipboard.clearContents()
         guard clipboard.writeObjects([item]) else {
             reportError("Could not copy the selected shots.")
@@ -419,11 +449,24 @@ final class CaptureStore {
         }
         let count = batch.captures.count
         let label = count == 1 ? "1 shot" : "\(count) shots"
-        let compact = batch.isShortened ? " Compact context; full text remains in your shots." : ""
+        let compact = copyContent != .imageOnly && batch.isShortened ? " Shortened accessibility trees; full trees remain in your shots." : ""
         let unavailable = batch.omittedScreenshotNumbers.isEmpty ? "" :
             " Screenshots unavailable for shots \(batch.omittedScreenshotNumbers.map(String.init).joined(separator: ", ")); their text is included."
-        report(.success, "Copied", message: "\(label) copied.\(compact)\(unavailable)")
-        if pasteImageThenText && !batch.imagePNGs.isEmpty {
+        switch copyContent {
+        case .screenshotAndTree:
+            report(.success, "Copied", message: "\(label) copied.\(compact)\(unavailable)")
+        case .treeOnly:
+            report(.success, "Copied", message: "Accessibility trees for \(label) copied.\(compact)")
+        case .imageOnly:
+            let imageCount = batch.imagePNGs.count
+            let imageLabel = imageCount == 1 ? "1 screenshot" : "\(imageCount) screenshots"
+            let missing = batch.captures.enumerated().compactMap { offset, capture in
+                capture.pngData == nil || batch.unavailableImageIDs.contains(capture.id) ? String(offset + 1) : nil
+            }
+            let skipped = missing.isEmpty ? "" : " Skipped shots \(missing.joined(separator: ", ")) because their screenshots are unavailable."
+            report(.success, "Copied", message: "\(imageLabel) copied.\(skipped)")
+        }
+        if copyContent == .screenshotAndTree && pasteImageThenText && !batch.imagePNGs.isEmpty {
             if captureShortcut == CaptureShortcut(keyCode: UInt16(kVK_ANSI_V), modifierFlags: .command) {
                 report(.info, "Paste assistance", message: "\(label) copied. Choose a capture shortcut other than ⌘V to use paste assistance.")
             } else if assistedPaste.arm(batch: batch, clipboard: clipboard) {
@@ -851,7 +894,7 @@ final class CaptureStore {
     }
     func copyTree() {
         guard let capture = selectedCapture, !capture.axTree.isEmpty else { return }
-        copy(capture.treeText, message: "Accessibility tree copied.")
+        copy(capture.clipboardText, message: "Accessibility tree copied.")
     }
     func copyContext() {
         guard let capture = selectedCapture else { return }
@@ -864,7 +907,7 @@ final class CaptureStore {
     func copyCapture(_ id: UUID) -> Bool {
         guard let capture = captures.first(where: { $0.id == id }) else { return false }
         let success = writeCaptureToClipboard(capture)
-        if success { report(.success, "Copied", message: "\(capture.appName) shot copied.") } else { reportError("Could not copy the capture.") }
+        if success { report(.success, "Copied", message: copyConfirmation(for: capture)) }
         if success { armAssistedPaste(for: capture); confirmManualCopy() }
         return success
     }
@@ -875,21 +918,35 @@ final class CaptureStore {
         guard autoCopyCapture, !isCapturing, lastAutoCopiedID != capture.id else { return }
         if writeCaptureToClipboard(capture) {
             lastAutoCopiedID = capture.id
-            report(.success, "Copied", message: "\(capture.appName) shot copied.")
+            report(.success, "Copied", message: copyConfirmation(for: capture))
             armAssistedPaste(for: capture)
             playCopySound()
-        } else { reportError("Could not copy the capture.") }
+        }
     }
 
     private func writeCaptureToClipboard(_ capture: CaptureResult) -> Bool {
         assistedPaste.cancel()
-        let item = CaptureClipboardService.makeItem(for: capture)
+        guard let item = CaptureClipboardService.makeItem(for: capture, content: copyContent) else {
+            cancelCopyCollapse()
+            reportError("This shot has no available screenshot. Capture again with Screen Recording enabled, or choose AX tree in Settings.")
+            return false
+        }
         clipboard.clearContents()
-        return clipboard.writeObjects([item])
+        let success = clipboard.writeObjects([item])
+        if !success { reportError("Could not copy the capture.") }
+        return success
+    }
+
+    private func copyConfirmation(for capture: CaptureResult) -> String {
+        switch copyContent {
+        case .screenshotAndTree: return "\(capture.appName) shot copied."
+        case .imageOnly: return "\(capture.appName) screenshot copied."
+        case .treeOnly: return "\(capture.appName) accessibility tree copied."
+        }
     }
 
     private func armAssistedPaste(for capture: CaptureResult) {
-        guard pasteImageThenText, capture.pngData != nil else { return }
+        guard copyContent == .screenshotAndTree, pasteImageThenText, capture.pngData != nil else { return }
         guard captureShortcut != CaptureShortcut(keyCode: UInt16(kVK_ANSI_V), modifierFlags: .command) else {
             report(.info, "Paste assistance", message: "Shot copied. Choose a capture shortcut other than ⌘V to use Paste image, then text.")
             return

@@ -44,7 +44,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.start()
         panelController = NotchPanelController(store: store)
         panelController?.show()
-        cardController = CaptureCardController(store: store)
+        cardController = CaptureCardController(store: store, compactLandingFrame: { [weak self] in
+            self?.panelController?.compactLandingFrame
+        })
         store.onPresentCard = { [weak self] capture in self?.cardController?.present(capture) }
         store.onDismissCard = { [weak self] in self?.cardController?.dismiss() }
         store.onLandCard = { [weak self] finish in

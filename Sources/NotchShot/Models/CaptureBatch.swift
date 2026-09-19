@@ -11,9 +11,9 @@ enum BatchContextStyle: String, CaseIterable, Identifiable, Sendable {
     var help: String {
         switch self {
         case .compact:
-            return "Keep the main text, useful controls, and capture notes. Repeated lines and omitted or shortened content are marked. Originals stay unchanged."
+            return "Keep a bounded excerpt of each accessibility tree, preserving its order and indentation. Shortened trees are marked; originals stay unchanged."
         case .full:
-            return "Include every shot’s complete text, OCR, accessibility tree, and capture notes."
+            return "Include every shot’s complete accessibility tree with its app and window name."
         }
     }
 }
@@ -67,7 +67,7 @@ struct CaptureBatch: Sendable {
         // multi-megabyte context just to discard it in Compact mode.
         originalCharacterCount = Self.fullCharacterCount(orderedCaptures, unavailableImageIDs: unavailable)
 
-        let header = "# NotchShot — \(orderedCaptures.count) shots · Compact context\n\nLocally prepared excerpts. Any omitted or shortened content is marked; full originals remain in NotchShot."
+        let header = "# NotchShot — \(orderedCaptures.count) shots · Compact context\n\nAccessibility-tree excerpts. Any shortened content is marked; full trees remain in NotchShot."
         let separator = "\n\n"
         let bodyBudget = Self.maximumCompactCharacters - header.count - separator.count * orderedCaptures.count
         let perShotBudget = min(Self.maximumCompactCharactersPerShot, max(0, bodyBudget / orderedCaptures.count))
@@ -79,7 +79,7 @@ struct CaptureBatch: Sendable {
         contextText = ([header] + excerpts.map(\.text)).joined(separator: separator)
         characterCount = contextText.count
         isShortened = excerpts.contains(where: \.isShortened)
-        removedDuplicateLines = excerpts.reduce(0) { $0 + $1.removedDuplicateLines }
+        removedDuplicateLines = 0
         identity = Self.identity(style: contextStyle, contextText: contextText, captures: orderedCaptures)
     }
 
@@ -103,8 +103,6 @@ struct CaptureBatch: Sendable {
     private struct Excerpt {
         var text: String
         var isShortened: Bool
-        var removedDuplicateLines: Int = 0
-        var didStopExamining: Bool = false
     }
 
     private static func boundary(index: Int, total: Int) -> String {
@@ -123,13 +121,13 @@ struct CaptureBatch: Sendable {
         let sections = captures.enumerated().map {
             boundary(index: $0.offset + 1, total: captures.count) + "\n"
                 + screenshotNote($0.element, index: $0.offset + 1, unavailableImageIDs: unavailableImageIDs)
-                + "\n\n" + $0.element.contextText
+                + "\n\n" + $0.element.clipboardText
         }
         return (["# NotchShot — \(captures.count) shots · Full context"] + sections).joined(separator: "\n\n")
     }
 
-    /// Counts exactly the pieces used by CaptureResult.contextText, including
-    /// tree indentation, without materializing a second complete context string.
+    /// Counts exactly the clipboard payload, including indentation and Unicode
+    /// boundaries, without allocating every full tree in Compact mode.
     private static func fullCharacterCount(_ captures: [CaptureResult], unavailableImageIDs: Set<UUID>) -> Int {
         guard !captures.isEmpty else { return 0 }
         var counter = CharacterCounter()
@@ -137,53 +135,49 @@ struct CaptureBatch: Sendable {
         for (index, capture) in captures.enumerated() {
             counter.append("\n\n" + boundary(index: index + 1, total: captures.count) + "\n")
             counter.append(screenshotNote(capture, index: index + 1, unavailableImageIDs: unavailableImageIDs))
-            counter.append("\n\n# Appshot — ")
-            counter.append(capture.appName)
-            counter.append("\n\nWindow: ")
+            counter.append("\n\n")
+            counter.append(capture.clipboardTreeNotice)
+            counter.append("Window: \"")
             counter.append(capture.windowTitle)
-            counter.append("\n\nCaptured: " + capture.date.ISO8601Format())
-            for (heading, text) in [
-                ("Accessibility text", capture.accessibilityText),
-                ("Text recognized from screenshot (OCR)", capture.ocrText),
-                ("Imported text", capture.importedText)
-            ] where !text.isEmpty {
-                counter.append("\n\n## " + heading + "\n")
-                counter.append(text)
-            }
-            if !capture.axTree.isEmpty {
-                counter.append("\n\n## Accessibility tree\nWindow: \"")
-                counter.append(capture.windowTitle)
-                counter.append("\", App: ")
-                counter.append(capture.appName)
-                counter.append(".\n")
-                var stack = capture.axTree.reversed().map { (node: $0, depth: 0) }
-                var first = true
-                while let (node, depth) = stack.popLast() {
-                    if !first { counter.append("\n") }
-                    first = false
-                    let indentation = String(repeating: "\t", count: depth)
-                    counter.append(indentation)
-                    for part in labelParts(node) {
-                        var start = part.startIndex
-                        while let newline = part.range(of: "\n", options: .literal, range: start..<part.endIndex) {
-                            counter.append(part[start..<newline.lowerBound])
-                            counter.append("\n" + indentation + "  ")
-                            start = newline.upperBound
-                        }
-                        counter.append(part[start...])
-                    }
-                    stack.append(contentsOf: node.children.reversed().map { ($0, depth + 1) })
-                }
-            }
-            if !capture.warnings.isEmpty {
-                counter.append("\n\n## Capture notes\n")
-                for (index, warning) in capture.warnings.enumerated() {
-                    counter.append(index == 0 ? "- " : "\n- ")
-                    counter.append(warning)
+            counter.append("\", App: ")
+            counter.append(capture.appName)
+            counter.append(".\n")
+            if capture.axTree.isEmpty {
+                counter.append("No accessibility tree was available for this shot.")
+            } else {
+                _ = visitTree(capture.axTree) { part in
+                    counter.append(part)
+                    return true
                 }
             }
         }
         return counter.count
+    }
+
+    /// Emits the same depth-first, indented hierarchy as AXNode.formatted.
+    /// Labels are streamed in pieces so one large AX value is never copied into
+    /// a temporary complete label merely to keep a small prefix of it.
+    @discardableResult
+    private static func visitTree(_ roots: [AXNode], append: (Substring) -> Bool) -> Bool {
+        var stack = roots.reversed().map { (node: $0, depth: 0) }
+        var first = true
+        while let (node, depth) = stack.popLast() {
+            if !first, !append("\n") { return false }
+            first = false
+            let indentation = String(repeating: "\t", count: depth)
+            guard append(indentation[...]) else { return false }
+            for part in labelParts(node) {
+                var start = part.startIndex
+                while let newline = part.range(of: "\n", options: .literal, range: start..<part.endIndex) {
+                    guard append(part[start..<newline.lowerBound]),
+                          append(("\n" + indentation + "  ")[...]) else { return false }
+                    start = newline.upperBound
+                }
+                guard append(part[start...]) else { return false }
+            }
+            stack.append(contentsOf: node.children.reversed().map { ($0, depth + 1) })
+        }
+        return true
     }
 
     private static func labelParts(_ node: AXNode) -> [String] {
@@ -219,135 +213,49 @@ struct CaptureBatch: Sendable {
         }
     }
 
+    /// Accumulates only enough characters to detect truncation. The extra two
+    /// characters account for a combining mark joining the previous chunk.
+    private struct BoundedText {
+        let limit: Int
+        var text = ""
+        private var counter = CharacterCounter()
+
+        init(limit: Int) { self.limit = max(0, limit) }
+
+        mutating func append(_ part: Substring) -> Bool {
+            let end = part.index(part.startIndex, offsetBy: max(0, limit - counter.count) + 2,
+                                 limitedBy: part.endIndex) ?? part.endIndex
+            let prefix = part[..<end]
+            counter.append(prefix)
+            text += prefix
+            return counter.count <= limit && end == part.endIndex
+        }
+    }
+
     private static func compactShot(_ capture: CaptureResult, index: Int,
                                     total: Int, budget: Int, unavailableImageIDs: Set<UUID>) -> Excerpt {
         let app = clipped(capture.appName, limit: 180, marker: "…")
         let title = clipped(capture.windowTitle, limit: 280, marker: "…")
-        var shortened = app.isShortened || title.isShortened
-        let metadata = "\(boundary(index: index, total: total))\n\(screenshotNote(capture, index: index, unavailableImageIDs: unavailableImageIDs))\nApp: \(app.text)\nWindow: \(title.text)\nCaptured: \(capture.date.ISO8601Format())"
-        // The same priority used by CaptureResult.readableText. Other sources
-        // are explicitly named, never silently merged into this source.
-        let sources: [(name: String, text: String)] = [
-            ("Accessibility text", capture.accessibilityText),
-            ("Imported text", capture.importedText),
-            ("Text recognized from screenshot (OCR)", capture.ocrText)
-        ].filter { !$0.text.isEmpty }
-        let source = sources.first
-        let deduplicated = deduplicatingLines(source?.text ?? "", inputLimit: min(24_000, budget * 4))
-        shortened = shortened || deduplicated.isShortened
-
-        var trailing: [String] = []
-        if deduplicated.didStopExamining {
-            trailing.append("[Remaining source not examined in compact context; full text retained in NotchShot.]")
+        let metadataShortened = app.isShortened || title.isShortened
+        var metadata = "\(boundary(index: index, total: total))\n\(screenshotNote(capture, index: index, unavailableImageIDs: unavailableImageIDs))\n\n\(capture.clipboardTreeNotice)Window: \"\(title.text)\", App: \(app.text).\n"
+        if metadataShortened {
+            metadata += "[App or window name shortened; full names retained in NotchShot.]\n"
         }
-        if sources.count > 1 {
-            trailing.append("[Additional sources omitted in compact context: \(sources.dropFirst().map(\.name).joined(separator: ", ")). Full sources retained in NotchShot.]")
-            shortened = true
-        }
-        if !capture.axTree.isEmpty {
-            trailing.append(controlsSummary(capture.axTree, limit: min(650, budget / 5)))
-            shortened = true // Even a complete control list omits tree hierarchy.
-        }
-        if !capture.warnings.isEmpty {
-            let warnings = compactWarnings(capture.warnings, limit: min(600, budget / 5))
-            trailing.append("Capture notes:\n" + warnings.text)
-            shortened = shortened || warnings.isShortened
-        }
-
-        var sections = [metadata]
-        if let source {
-            let heading = "\(source.name):\n"
-            let repeatedLineLabel = deduplicated.removedDuplicateLines == 1 ? "line" : "lines"
-            let duplicateNotice = deduplicated.removedDuplicateLines > 0
-                ? "\n[Removed \(deduplicated.removedDuplicateLines) repeated \(repeatedLineLabel) within this source.]" : ""
-            let fixedCount = metadata.count + trailing.reduce(0) { $0 + $1.count }
-            let separatorCount = (trailing.count + 1) * 2
-            let available = max(0, budget - fixedCount - separatorCount - heading.count - duplicateNotice.count)
-            let readable = clipped(deduplicated.text, limit: available,
-                                   marker: "\n[Text shortened to fit compact context; full text retained in NotchShot.]")
-            sections.append(heading + readable.text + duplicateNotice)
-            shortened = shortened || readable.isShortened
+        let treeBudget = max(0, budget - metadata.count)
+        var tree = BoundedText(limit: treeBudget)
+        if capture.axTree.isEmpty {
+            _ = tree.append("No accessibility tree was available for this shot.")
         } else {
-            sections.append("No readable text was captured.")
+            visitTree(capture.axTree) { tree.append($0) }
         }
-        sections += trailing
-        let assembled = sections.joined(separator: "\n\n")
-        // Also bound metadata-only shots and pathological imported fields. The
-        // final marker survives clipping, rather than losing the disclosure.
-        let bounded = clipped(assembled, limit: budget,
-                              marker: "\n[Shot excerpt shortened; full capture retained in NotchShot.]")
-        return Excerpt(text: bounded.text, isShortened: shortened || bounded.isShortened,
-                       removedDuplicateLines: deduplicated.removedDuplicateLines)
-    }
-
-    private static func deduplicatingLines(_ text: String, inputLimit: Int) -> Excerpt {
-        let end = text.index(text.startIndex, offsetBy: max(0, inputLimit), limitedBy: text.endIndex) ?? text.endIndex
-        let stopped = end != text.endIndex
-        var seen = Set<String>()
-        var result: [String] = []
-        var removed = 0
-        for line in text[..<end].split(separator: "\n", omittingEmptySubsequences: false) {
-            let comparison = line.split(whereSeparator: \.isWhitespace).joined(separator: " ")
-            // Repeated short labels, numbers, and blank lines often convey
-            // structure. Only substantial repeated lines qualify for removal.
-            if comparison.count >= 24, comparison.contains(where: \.isLetter) {
-                guard seen.insert(comparison).inserted else { removed += 1; continue }
-            }
-            result.append(String(line))
-        }
-        return Excerpt(text: result.joined(separator: "\n"), isShortened: removed > 0 || stopped,
-                       removedDuplicateLines: removed, didStopExamining: stopped)
-    }
-
-    private static func compactWarnings(_ warnings: [String], limit: Int) -> Excerpt {
-        var text = ""
-        for warning in warnings {
-            if !text.isEmpty { text += "\n" }
-            text += "- "
-            text += warning.prefix(max(0, limit + 1 - text.count))
-            if text.count > limit { break }
-        }
-        return clipped(text, limit: limit,
-                       marker: "\n[Capture notes shortened; full notes retained in NotchShot.]")
-    }
-
-    private static func controlsSummary(_ roots: [AXNode], limit: Int) -> String {
-        let roles: Set<String> = ["AXButton", "AXLink", "AXCheckBox", "AXRadioButton",
-                                  "AXTextField", "AXTextArea", "AXPopUpButton", "AXComboBox",
-                                  "AXMenuButton", "AXSlider", "AXTab", "AXDisclosureTriangle"]
-        var stack = Array(roots.reversed())
-        var lines: [String] = []
-        var length = 0
-        while let node = stack.popLast() {
-            if roles.contains(node.role) || !node.url.isEmpty {
-                let label: String
-                if node.isProtected {
-                    label = (node.roleDescription.isEmpty ? node.role : node.roleDescription) + " [protected]"
-                } else {
-                    let role = clipped(node.roleDescription.isEmpty ? node.role : node.roleDescription,
-                                       limit: 40, marker: "…").text
-                    let name = clipped(node.title.isEmpty ? node.elementDescription : node.title,
-                                       limit: 100, marker: "…").text
-                    let url = clipped(node.url, limit: 180, marker: "…").text
-                    let value = clipped(node.value, limit: 90, marker: "…").text
-                    label = role + (node.isSettable ? " (settable)" : "")
-                        + (name.isEmpty ? "" : ": " + name)
-                        + (value.isEmpty || value == name ? "" : ", Value: " + value)
-                        + (url.isEmpty || url == value ? "" : " — " + url)
-                }
-                lines.append("- " + label)
-                length += label.count + 3
-                if length >= limit { break }
-            }
-            stack.append(contentsOf: node.children.reversed())
-        }
-        let heading = "Accessibility controls and links (partial; full tree retained):\n"
-        guard !lines.isEmpty else {
-            return "[Accessibility tree omitted: no controls or links to list. Full tree retained in NotchShot.]"
-        }
-        let body = clipped(lines.joined(separator: "\n"), limit: max(0, limit - heading.count),
-                           marker: "\n[… more controls or links omitted.]")
-        return heading + body.text
+        let excerpt = clipped(tree.text, limit: treeBudget,
+                              marker: "\n[Accessibility tree shortened to fit compact context; full tree retained in NotchShot.]")
+        // Shelf batches contain at most eight shots. Keep a final bound for
+        // unusually large programmatic batches or future metadata additions.
+        let bounded = clipped(metadata + excerpt.text, limit: budget,
+                              marker: "\n[Shot shortened; full capture retained in NotchShot.]")
+        return Excerpt(text: bounded.text,
+                       isShortened: metadataShortened || excerpt.isShortened || bounded.isShortened)
     }
 
     private static func clipped(_ text: String, limit: Int, marker: String) -> Excerpt {

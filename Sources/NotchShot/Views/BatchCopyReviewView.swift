@@ -4,6 +4,7 @@ import SwiftUI
 /// The text shown here is the exact prepared context used for copying. The
 /// native viewport keeps large Full copies out of SwiftUI's layout measurement.
 struct BatchCopyReviewView: View {
+    @Environment(\.notchTheme) private var theme
     @Bindable var store: CaptureStore
     let dismiss: () -> Void
 
@@ -18,7 +19,11 @@ struct BatchCopyReviewView: View {
                     .accessibilityLabel("Close selection review")
             }
 
-            if store.selectedShotCount > 0 {
+            Text(store.copyContent.label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(theme.accent)
+
+            if store.selectedShotCount > 0 && store.copyContent != .imageOnly {
                 Picker("Selected shot context", selection: $store.batchContextStyle) {
                     ForEach(BatchContextStyle.allCases) { style in
                         Text(style.label).tag(style)
@@ -30,11 +35,13 @@ struct BatchCopyReviewView: View {
             }
 
             if let batch = store.selectedBatch {
+                let imageCount = store.copyContent == .treeOnly ? 0 : batch.imagePNGs.count
+                let text = reviewedText(for: batch)
                 HStack(spacing: 8) {
                     Label("\(batch.captures.count) \(batch.captures.count == 1 ? "shot" : "shots")", systemImage: "rectangle.on.rectangle")
-                    Text("\(batch.imagePNGs.count) \(batch.imagePNGs.count == 1 ? "image" : "images")")
+                    Text("\(imageCount) \(imageCount == 1 ? "image" : "images")")
                     Spacer()
-                    Text("\(batch.characterCount.formatted()) characters")
+                    Text("\(reviewedCharacterCount(for: batch).formatted()) characters")
                         .monospacedDigit()
                 }
                 .font(.system(size: 10))
@@ -42,12 +49,12 @@ struct BatchCopyReviewView: View {
 
                 Text(disclosure(for: batch))
                     .font(.system(size: 10))
-                    .foregroundStyle(batch.isShortened ? NotchStyle.accent.opacity(0.9) : Color.white.opacity(0.55))
+                    .foregroundStyle(batch.isShortened ? theme.accent.opacity(0.9) : Color.white.opacity(0.55))
                     .fixedSize(horizontal: false, vertical: true)
 
-                if !batch.omittedScreenshotNumbers.isEmpty {
+                if store.copyContent != .treeOnly && !batch.omittedScreenshotNumbers.isEmpty {
                     Label {
-                        Text("Screenshots unavailable for shots \(batch.omittedScreenshotNumbers.map(String.init).joined(separator: ", ")). Their text is included.")
+                        Text("Screenshots unavailable for shots \(batch.omittedScreenshotNumbers.map(String.init).joined(separator: ", ")). \(store.copyContent == .imageOnly ? "Those images are skipped." : "Their text is included.")")
                             .fixedSize(horizontal: false, vertical: true)
                     } icon: {
                         Image(systemName: "photo.badge.exclamationmark")
@@ -57,7 +64,7 @@ struct BatchCopyReviewView: View {
                     .accessibilityElement(children: .combine)
                 }
 
-                ReadOnlyCaptureTextView(text: batch.contextText, accessibilityLabel: "Selected shot context", wrapsLines: true)
+                ReadOnlyCaptureTextView(text: store.copyContent == .imageOnly ? "Only screenshots will be copied. No accessibility text is included." : text, accessibilityLabel: "Selected shot context", wrapsLines: true)
                     .frame(height: 220)
                     .background(Color.black.opacity(0.3), in: RoundedRectangle(cornerRadius: 9))
                     .clipShape(RoundedRectangle(cornerRadius: 9))
@@ -74,11 +81,11 @@ struct BatchCopyReviewView: View {
                         Label("Copy selected", systemImage: "doc.on.doc")
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(NotchStyle.accent)
+                    .tint(theme.accent)
                     .foregroundStyle(.black)
                     .controlSize(.small)
-                    .disabled(store.isPreparingBatch)
-                    .accessibilityLabel("Copy \(batch.captures.count) selected shots with reviewed context")
+                    .disabled(store.isPreparingBatch || (store.copyContent == .imageOnly && imageCount == 0))
+                    .accessibilityLabel("Copy \(batch.captures.count) selected shots, \(store.copyContent.label)")
                 }
             } else if store.isPreparingBatch {
                 VStack(spacing: 10) {
@@ -105,12 +112,31 @@ struct BatchCopyReviewView: View {
     }
 
     private func disclosure(for batch: CaptureBatch) -> String {
+        if store.copyContent == .imageOnly {
+            return "Screenshots in shelf order. Multiple images paste together in apps that accept rich documents."
+        }
         if batch.contextStyle == .full {
-            return "Full context includes each shot’s text, notes, and accessibility tree in shelf order."
+            return "Full context includes each shot’s complete accessibility tree in shelf order."
         }
         if batch.isShortened {
-            return "Compact: \(batch.characterCount.formatted()) characters (full: \(batch.originalCharacterCount.formatted())). Omitted, shortened, or repeated content is marked below."
+            return "Compact: \(batch.characterCount.formatted()) characters (full: \(batch.originalCharacterCount.formatted())). Each shortened tree is marked below."
         }
-        return "Compact keeps useful context together, with a limit for long sections. Shots are numbered in shelf order."
+        return "Compact keeps the accessibility hierarchy, with a limit for long trees. Shots are numbered in shelf order."
+    }
+
+    private func reviewedText(for batch: CaptureBatch) -> String {
+        switch store.copyContent {
+        case .screenshotAndTree: return batch.contextText
+        case .imageOnly: return ""
+        case .treeOnly: return CaptureClipboardService.treeText(for: batch)
+        }
+    }
+
+    private func reviewedCharacterCount(for batch: CaptureBatch) -> Int {
+        switch store.copyContent {
+        case .screenshotAndTree: return batch.characterCount
+        case .imageOnly: return 0
+        case .treeOnly: return CaptureClipboardService.treeCharacterCount(for: batch)
+        }
     }
 }

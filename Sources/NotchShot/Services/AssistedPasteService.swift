@@ -127,7 +127,7 @@ final class AssistedPasteService: AssistedPasteServing {
               let item = clipboard.pasteboardItems?.first,
               clipboard.pasteboardItems?.count == 1,
               item.data(forType: .png) == png,
-              item.string(forType: .string) == capture.contextText else { return false }
+              item.string(forType: .string) == capture.clipboardText else { return false }
 
         let representations = item.types.compactMap { type in item.data(forType: type).map { (type, $0) } }
         guard clipboard.changeCount == initialChangeCount else { return false }
@@ -136,7 +136,7 @@ final class AssistedPasteService: AssistedPasteServing {
             imageRepresentations.append((.tiff, tiff))
         }
         return armPrepared(clipboard: clipboard, initialChangeCount: initialChangeCount,
-                           originals: representations, images: [imageRepresentations], context: capture.contextText)
+                           originals: representations, images: [imageRepresentations], context: capture.clipboardText)
     }
 
     @discardableResult

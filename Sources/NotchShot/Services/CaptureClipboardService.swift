@@ -8,6 +8,67 @@ import ImageIO
 enum CaptureClipboardService {
     static let batchIdentifierType = NSPasteboard.PasteboardType("com.bchewy.notchshot.batch-identity")
 
+    /// A nil result means there is no image to copy. Callers must prepare the
+    /// item before clearing the pasteboard so image-only copy preserves it.
+    static func makeItem(for capture: CaptureResult, content: CaptureCopyContent) -> NSPasteboardItem? {
+        switch content {
+        case .screenshotAndTree:
+            return makeItem(for: capture)
+        case .treeOnly:
+            let item = NSPasteboardItem()
+            item.setString(capture.clipboardText, forType: .string)
+            return item
+        case .imageOnly:
+            guard let png = capture.pngData, let image = image(from: png) else { return nil }
+            let item = NSPasteboardItem()
+            item.setData(png, forType: .png)
+            if let tiff = image.tiffRepresentation {
+                item.setData(tiff, forType: .tiff)
+            }
+            return item
+        }
+    }
+
+    static func makeItem(for batch: CaptureBatch, content: CaptureCopyContent) -> NSPasteboardItem? {
+        switch content {
+        case .screenshotAndTree:
+            return makeItem(for: batch)
+        case .treeOnly:
+            let item = NSPasteboardItem()
+            item.setString(treeText(for: batch), forType: .string)
+            return item
+        case .imageOnly:
+            let images = validatedImages(for: batch)
+            guard !images.isEmpty else { return nil }
+            let item = NSPasteboardItem()
+            if let rtfd = richDocument(images: images, context: "") {
+                item.setData(rtfd, forType: .rtfd)
+            }
+            item.setString(htmlDocument(images: images, context: nil), forType: .html)
+            if images.count == 1, let image = images.first {
+                item.setData(image.png, forType: .png)
+            }
+            return item
+        }
+    }
+
+    /// Replace only the generated first line. This keeps the prepared hierarchy
+    /// and truncation notices intact, while a shorter header preserves Compact's
+    /// character budget. Screenshot source labels still identify the originals.
+    static func treeText(for batch: CaptureBatch) -> String {
+        treeHeader(for: batch) + batch.contextText.drop(while: { $0 != "\n" })
+    }
+
+    /// The rest of the prepared text is unchanged; count only the short headers
+    /// rather than rescanning potentially multi-megabyte trees on the main actor.
+    static func treeCharacterCount(for batch: CaptureBatch) -> Int {
+        batch.characterCount - batch.contextText.prefix(while: { $0 != "\n" }).count + treeHeader(for: batch).count
+    }
+
+    private static func treeHeader(for batch: CaptureBatch) -> String {
+        "# NotchShot — \(batch.captures.count) trees · No images"
+    }
+
     /// A single rich document keeps all selected images in shelf order. Publishing
     /// just its first PNG as an alternative would silently discard the other shots
     /// in image-preferring destinations, so that fallback is only offered for one image.
@@ -57,7 +118,7 @@ enum CaptureClipboardService {
 
     static func makeItem(for capture: CaptureResult) -> NSPasteboardItem {
         let item = NSPasteboardItem()
-        let context = capture.contextText
+        let context = capture.clipboardText
 
         if let png = capture.pngData, let image = image(from: png) {
             let size = displaySize(for: image.size)
@@ -146,12 +207,15 @@ enum CaptureClipboardService {
         )
     }
 
-    private static func htmlDocument(images: [BatchImage], context: String) -> String {
+    private static func htmlDocument(images: [BatchImage], context: String?) -> String {
         let markup = images.map { image in
             "<img src=\"data:image/png;base64,\(image.png.base64EncodedString())\" width=\"\(Int(image.size.width))\" height=\"\(Int(image.size.height))\" alt=\"NotchShot screenshot \(image.ordinal)\"><br><br>"
         }.joined()
+        let text = context.map {
+            "<pre style=\"white-space:pre-wrap;overflow-wrap:break-word;font:13px system-ui,sans-serif\">\(escapeHTML($0))</pre>"
+        } ?? ""
         return """
-        <!doctype html><html><head><meta charset="UTF-8"></head><body>\(markup)<pre style="white-space:pre-wrap;overflow-wrap:break-word;font:13px system-ui,sans-serif">\(escapeHTML(context))</pre></body></html>
+        <!doctype html><html><head><meta charset="UTF-8"></head><body>\(markup)\(text)</body></html>
         """
     }
 

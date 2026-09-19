@@ -71,10 +71,10 @@ struct CaptureDetailView: View {
                 .opacity(canCopy(capture) ? 1 : 0.4)
                 .help(tab == .tree ? "Copy the complete accessibility tree" : tab.copyTitle)
                 Button(action: store.copyContext) {
-                    Label("Copy all", systemImage: "square.on.square")
+                    Label("Copy shot", systemImage: "square.on.square")
                 }
                 .buttonStyle(NotchActionStyle())
-                .help("Copy the screenshot and app context to the clipboard")
+                .help("Copy \(store.copyContent.label.lowercased()) to the clipboard")
                 Spacer(minLength: 0)
                 Button(action: store.exportSelected) {
                     Label("Export folder", systemImage: "square.and.arrow.up")

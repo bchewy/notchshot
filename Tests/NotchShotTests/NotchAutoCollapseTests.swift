@@ -316,7 +316,7 @@ final class NotchAutoCollapseTests: XCTestCase {
         XCTAssertTrue(fixture.store.copyCapture(shot.id))
         attention(fixture.store, pointerInside: true)
         fixture.store.noteNotchActivity() // Native mouseUp/keyUp from the same copy gesture.
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), shot.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), shot.clipboardText)
         try await Task.sleep(for: .milliseconds(80))
         XCTAssertFalse(fixture.store.isExpanded, "The manual copy feedback delay remains independent of idle attention.")
         XCTAssertEqual(fixture.store.captures.map(\.id), [shot.id])

@@ -2,15 +2,22 @@
 import SwiftUI
 
 struct CaptureEmptyView: View {
+    @Environment(\.notchTheme) private var theme
     @Bindable var store: CaptureStore
     var reviewingPermissions = false
+    @State private var scrollbarProtection = UUID()
 
     private var isReady: Bool { store.accessibilityGranted && store.screenRecordingGranted }
 
     var body: some View {
-        ScrollView {
+        NotchScrollView(
+            accessibilityLabel: reviewingPermissions ? "Settings scroll position" : "Permissions scroll position",
+            onDraggingChange: { store.setAutoCollapseProtection(owner: scrollbarProtection, active: $0) }
+        ) {
             VStack(alignment: .leading, spacing: 10) {
                 if reviewingPermissions {
+                    ThemeSettingsView(store: store)
+                    DisplaySettingsView(store: store)
                     AutoCollapseSettingsView(store: store)
                     ShortcutSettingsView(
                         shortcut: store.captureShortcut,
@@ -32,7 +39,7 @@ struct CaptureEmptyView: View {
                         }
                         .toggleStyle(.checkbox)
                         .font(.system(size: 11))
-                        .tint(NotchStyle.accent)
+                        .tint(theme.accent)
                         ShutterSoundPickerView(store: store)
                         HStack(spacing: 8) {
                             Text("Volume")
@@ -40,7 +47,7 @@ struct CaptureEmptyView: View {
                                 .foregroundStyle(Color.white.opacity(0.6))
                             Slider(value: $store.captureSoundVolume, in: 0...1)
                                 .controlSize(.small)
-                                .tint(NotchStyle.accent)
+                                .tint(theme.accent)
                                 .accessibilityLabel("Sound volume")
                                 .help("Volume for capture shutters and copy confirmations.")
                                 .accessibilityValue("\(Int((store.captureSoundVolume * 100).rounded())) percent")
@@ -101,21 +108,30 @@ struct CaptureEmptyView: View {
                         .foregroundStyle(Color.orange.opacity(0.8))
                         .fixedSize(horizontal: false, vertical: true)
                 }
+
+                if reviewingPermissions {
+                    Text(AppBuildIdentity.current.label)
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.white.opacity(0.45))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .accessibilityLabel("NotchShot build: \(AppBuildIdentity.current.label)")
+                        .help(AppBuildIdentity.current.detail)
+                        .padding(.top, 4)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 2)
         }
-        .scrollIndicators(.hidden, axes: .vertical)
-        .defaultScrollAnchor(.top)
     }
 
     private var introduction: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: reviewingPermissions ? "lock.open" : "macwindow.on.rectangle")
                 .font(.system(size: 15, weight: .regular))
-                .foregroundStyle(NotchStyle.accent)
+                .foregroundStyle(theme.accent)
                 .frame(width: 28, height: 28)
-                .background(NotchStyle.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                .background(theme.accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
             VStack(alignment: .leading, spacing: 3) {
                 Text(reviewingPermissions ? "Capture permissions" : isReady ? "Ready to capture" : "Allow app capture")
                     .font(.system(size: 13, weight: .semibold))
@@ -147,7 +163,7 @@ struct CaptureEmptyView: View {
             if granted {
                 Label("Allowed", systemImage: "checkmark.circle.fill")
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(NotchStyle.accent)
+                    .foregroundStyle(theme.accent)
                     .fixedSize()
             } else {
                 Button("Enable", action: action)

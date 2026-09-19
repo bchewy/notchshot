@@ -30,7 +30,7 @@ final class CopyCollapseTests: XCTestCase {
             case "text": XCTAssertEqual(fixture.clipboard.string(forType: .string), "Accessibility text\n\(capture.accessibilityText)")
             case "tree": XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.treeText)
             default:
-                XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.contextText)
+                XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.clipboardText)
                 XCTAssertEqual(fixture.clipboard.data(forType: .png), capture.pngData)
             }
             try await settle(untilCollapsed: store)
@@ -53,7 +53,7 @@ final class CopyCollapseTests: XCTestCase {
         store.isExpanded = true
 
         XCTAssertTrue(store.copyCapture(hovered.id))
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), hovered.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), hovered.clipboardText)
         XCTAssertEqual(fixture.clipboard.data(forType: .png), hovered.pngData)
         XCTAssertNotNil(fixture.clipboard.data(forType: .tiff))
         XCTAssertEqual(store.selectedID, selected.id)
@@ -77,7 +77,7 @@ final class CopyCollapseTests: XCTestCase {
         XCTAssertTrue(store.copyCapture(capture.id))
         try await settle()
         XCTAssertTrue(store.isExpanded)
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.clipboardText)
 
         let restored = CaptureStore(preferences: fixture.preferences,
                                     captureSound: SilentCollapseCaptureSound(),
@@ -132,7 +132,7 @@ final class CopyCollapseTests: XCTestCase {
         store.openShelfAfterCapture = true
         store.pendingCapture = capture
         store.acceptPendingCapture()
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.clipboardText)
         XCTAssertEqual(store.captures.map(\.id), [capture.id])
         XCTAssertTrue(store.isExpanded)
         try await settle()
@@ -207,7 +207,7 @@ final class CopyCollapseTests: XCTestCase {
                 end(store)
                 try await settle()
                 XCTAssertTrue(store.isExpanded, "\(name), active before copy: \(busyBeforeCopy), must prevent a stale close.")
-                XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.contextText)
+                XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.clipboardText)
                 store.stop()
             }
         }
@@ -262,7 +262,7 @@ final class CopyCollapseTests: XCTestCase {
         XCTAssertTrue(store.copyCapture(second.id))
         try await Task.sleep(for: .milliseconds(90))
         XCTAssertTrue(store.isExpanded, "The first deadline must not cut off feedback for the second copy.")
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), second.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), second.clipboardText)
         try await Task.sleep(for: .milliseconds(120))
         XCTAssertFalse(store.isExpanded)
         XCTAssertEqual(fixture.sound.playCount, 2)
@@ -292,7 +292,7 @@ final class CopyCollapseTests: XCTestCase {
 
         XCTAssertTrue(store.copyCapture(capture.id))
         XCTAssertTrue(store.isExpanded)
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.clipboardText)
         try await waitForMotion {
             controller.presentation.progress < 1 && window.frame.height < expandedFrame.height
         }

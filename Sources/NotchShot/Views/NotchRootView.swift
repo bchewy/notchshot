@@ -7,6 +7,7 @@ struct NotchRootView: View {
     @Bindable var presentation: NotchPresentation
     @State private var isReviewingBatch = false
     @State private var isHoveringMascot = false
+    @State private var isHoveringClear = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -30,7 +31,8 @@ struct NotchRootView: View {
                 .allowsHitTesting(false)
         }
         .preferredColorScheme(.dark)
-        .tint(NotchStyle.accent)
+        .tint(store.theme.accent)
+        .environment(\.notchTheme, store.theme)
         .onChange(of: store.isExpanded) { _, expanded in
             if !expanded { isReviewingBatch = false }
         }
@@ -50,36 +52,61 @@ struct NotchRootView: View {
     }
 
     private var notchStrip: some View {
-        Button(action: store.toggleExpanded) {
-            HStack(spacing: 0) {
-                PhotographerMascotView(
-                    pose: .resolve(isCapturing: store.isCapturing,
-                                   hasPendingShot: store.pendingCapture != nil,
-                                   isLanding: store.isLandingCapture),
-                    camera: store.captureShutterSound,
-                    expansion: presentation.progress,
-                    isHovered: isHoveringMascot
-                )
-                    .frame(width: stripWingWidth)
-                Color.clear.frame(width: store.notchWidth)
-                Group {
-                    if store.isCapturing {
-                        ProgressView().controlSize(.mini).scaleEffect(0.55 + 0.15 * presentation.progress)
-                    } else {
-                        Circle()
-                            .fill(store.accessibilityGranted && store.screenRecordingGranted ? NotchStyle.accent : Color.white.opacity(0.42))
-                            .frame(width: 4 + presentation.progress, height: 4 + presentation.progress)
-                    }
+        HStack(spacing: 0) {
+            Button(action: store.toggleExpanded) {
+                HStack(spacing: 0) {
+                    PhotographerMascotView(
+                        pose: .resolve(isCapturing: store.isCapturing,
+                                       hasPendingShot: store.pendingCapture != nil,
+                                       isLanding: store.isLandingCapture),
+                        camera: store.captureShutterSound,
+                        expansion: presentation.progress,
+                        isHovered: isHoveringMascot
+                    )
+                        .frame(width: stripWingWidth)
+                    Color.clear.frame(width: store.notchWidth)
                 }
-                .frame(width: stripWingWidth)
+                .frame(height: stripHeight)
+                .contentShape(Rectangle())
             }
-            .frame(height: stripHeight)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .onHover { isHoveringMascot = $0 }
+            .accessibilityLabel(store.isExpanded ? "Collapse NotchShot" : "Open NotchShot")
+            .help(store.isExpanded ? "Collapse" : "Open shot shelf · \(store.captureHintHelp)")
+
+            if !store.captures.isEmpty || store.pendingCapture != nil {
+                Button(action: store.clearHistory) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 10 + 2 * presentation.progress, weight: .medium))
+                        .foregroundStyle(isHoveringClear ? store.theme.accent : store.theme.accent.opacity(0.65))
+                        .frame(width: stripWingWidth, height: stripHeight)
+                        .background(isHoveringClear ? store.theme.accent.opacity(0.1) : .clear, in: Capsule())
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .onHover { isHoveringClear = $0 }
+                .onDisappear { isHoveringClear = false }
+                .accessibilityLabel("Clear shot shelf")
+                .accessibilityHint("Removes all saved and incoming shots. Copied content stays on your clipboard.")
+                .help("Clear all shots from the shelf")
+            } else {
+                Button(action: store.toggleExpanded) {
+                    Group {
+                        if store.isCapturing {
+                            ProgressView().controlSize(.mini).scaleEffect(0.55 + 0.15 * presentation.progress)
+                        } else {
+                            Circle()
+                                .fill(store.accessibilityGranted && store.screenRecordingGranted ? store.theme.accent : Color.white.opacity(0.42))
+                                .frame(width: 4 + presentation.progress, height: 4 + presentation.progress)
+                        }
+                    }
+                    .frame(width: stripWingWidth, height: stripHeight)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(store.isExpanded ? "Collapse NotchShot" : "Open NotchShot")
+            }
         }
-        .buttonStyle(.plain)
-        .onHover { isHoveringMascot = $0 }
-        .accessibilityLabel(store.isExpanded ? "Collapse NotchShot" : "Open NotchShot")
-        .help(store.isExpanded ? "Collapse" : "Open shot shelf · \(store.captureHintHelp)")
     }
 
     private var expandedContent: some View {
@@ -154,7 +181,7 @@ struct NotchRootView: View {
                 Label("Review context", systemImage: "doc.text.magnifyingglass")
             }
             .buttonStyle(.plain)
-            .foregroundStyle(store.selectedShotCount > 0 ? NotchStyle.accent : Color.white.opacity(0.3))
+            .foregroundStyle(store.selectedShotCount > 0 ? store.theme.accent : Color.white.opacity(0.3))
             .disabled(store.selectedShotCount == 0)
             .help("Review the context and image count that will be copied")
             .popover(isPresented: $isReviewingBatch, arrowEdge: .bottom) {
@@ -173,13 +200,13 @@ struct NotchRootView: View {
                     .foregroundStyle(canCopyShelfSelection ? Color.black : Color.white.opacity(0.3))
                     .padding(.horizontal, 7)
                     .frame(height: 19)
-                    .background(canCopyShelfSelection ? NotchStyle.accent : NotchStyle.subtle, in: Capsule())
+                    .background(canCopyShelfSelection ? store.theme.accent : NotchStyle.subtle, in: Capsule())
                     .contentShape(Capsule())
             }
             .buttonStyle(.plain)
             .disabled(!canCopyShelfSelection)
-            .accessibilityLabel(store.isPreparingBatch ? "Preparing selected shot context" : "Copy \(store.selectedShotCount) selected \(store.selectedShotCount == 1 ? "shot" : "shots") with context")
-            .help(store.isPreparingBatch ? "Preparing the selected shots for copying" : "Copy every selected screenshot with its labeled context")
+            .accessibilityLabel(store.isPreparingBatch ? "Preparing selected shot context" : "Copy \(store.selectedShotCount) selected \(store.selectedShotCount == 1 ? "shot" : "shots"), \(store.copyContent.label)")
+            .help(store.isPreparingBatch ? "Preparing the selected shots for copying" : "Copy \(store.copyContent.label.lowercased()) for the selected shots")
         }
         .font(.system(size: 10))
         .lineLimit(1)
@@ -193,11 +220,11 @@ struct NotchRootView: View {
                     Label("Set up capture permissions", systemImage: "lock.open")
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(NotchStyle.accent)
+                .foregroundStyle(store.theme.accent)
             } else if !store.hasAvailableCaptureShortcut && !store.isRecordingShortcut {
                 Button("Set a capture shortcut", action: store.showCaptureSettings)
                     .buttonStyle(.plain)
-                    .foregroundStyle(NotchStyle.accent)
+                    .foregroundStyle(store.theme.accent)
             } else {
                 Label(shelfStatus, systemImage: store.isCapturing || store.isLandingCapture ? "viewfinder" : "keyboard")
                     .foregroundStyle(Color.white.opacity(0.45))

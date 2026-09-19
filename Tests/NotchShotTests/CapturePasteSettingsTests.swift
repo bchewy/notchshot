@@ -21,9 +21,9 @@ final class CapturePasteSettingsTests: XCTestCase {
         store.pasteImageThenText = true
         XCTAssertTrue(store.copyCapture(hovered.id))
         XCTAssertEqual(spy.armed, [hovered.id])
-        XCTAssertEqual(spy.contexts, [hovered.contextText])
+        XCTAssertEqual(spy.contexts, [hovered.clipboardText])
         XCTAssertEqual(store.selectedID, selected.id)
-        XCTAssertEqual(board.string(forType: .string), hovered.contextText)
+        XCTAssertEqual(board.string(forType: .string), hovered.clipboardText)
         XCTAssertNotNil(board.data(forType: .rtfd))
         let restored = CaptureStore(preferences: defaults, clipboard: board, assistedPaste: PasteArmSpy())
         defer { restored.stop() }
@@ -99,7 +99,7 @@ private final class PasteArmSpy: AssistedPasteServing {
     var cancelCount = 0
     func arm(capture: CaptureResult, clipboard: NSPasteboard) -> Bool {
         armed.append(capture.id)
-        contexts.append(capture.contextText)
+        contexts.append(capture.clipboardText)
         return true
     }
     func cancel() { cancelCount += 1 }

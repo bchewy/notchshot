@@ -2,23 +2,44 @@
 import SwiftUI
 
 struct CaptureBehaviorSettingsView: View {
+    @Environment(\.notchTheme) private var theme
     @Bindable var store: CaptureStore
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
             Text("Capture & copy")
                 .font(.system(size: 12, weight: .semibold))
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Copy content").font(.system(size: 11))
+                Picker("Copy content", selection: $store.copyContent) {
+                    ForEach(CaptureCopyContent.allCases) { content in
+                        Text(content.shortLabel).tag(content)
+                            .accessibilityLabel(content.label)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .controlSize(.small)
+                Text("\(store.copyContent.label) · Used for ⌘C, Copy shot, selected shots, and automatic copy.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.white.opacity(0.45))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Rectangle().fill(NotchStyle.border).frame(height: 1)
             settingToggle(
                 "Copy after capture",
-                detail: "Screenshot + text + accessibility context",
+                detail: "Use your Copy content choice when a capture finishes.",
                 isOn: $store.autoCopyCapture
             )
             Rectangle().fill(NotchStyle.border).frame(height: 1)
             settingToggle(
                 "Paste image, then text",
-                detail: "After copying a shot, your next ⌘V pastes both in two steps. Wait a moment before typing. Uses Accessibility; ready for 2 minutes.",
+                detail: store.copyContent == .screenshotAndTree
+                    ? "After copying a shot, your next ⌘V pastes both in two steps. Wait a moment before typing. Uses Accessibility; ready for 2 minutes."
+                    : "Available when Copy content is Screenshot + AX tree.",
                 isOn: $store.pasteImageThenText
             )
+            .disabled(store.copyContent != .screenshotAndTree)
             Rectangle().fill(NotchStyle.border).frame(height: 1)
             settingToggle(
                 "Open shelf after capture",
@@ -51,7 +72,7 @@ struct CaptureBehaviorSettingsView: View {
             }
         }
         .toggleStyle(.checkbox)
-        .tint(NotchStyle.accent)
+        .tint(theme.accent)
         .accessibilityLabel(title)
         .accessibilityHint(detail)
     }

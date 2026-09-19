@@ -14,9 +14,12 @@ your notch. Copy one shot or several into your next conversation.
 - Capture with **left Shift + right Shift together**, or a configurable shortcut.
 - Collect screenshots, accessibility text, and optional on-device OCR.
 - Preview, select, copy, import, and export shots from a compact notch shelf.
-- Copy multiple shots with full context or clearly labeled compact excerpts.
+- Choose screenshot + AX tree (default), image only, or AX tree only for copying.
+- Copy full accessibility trees or clearly marked compact tree excerpts.
 - Assist image-then-text pasting into apps that accept only one clipboard format.
 - Customize shutter sounds, automatic copying, and gentle auto-collapse behavior.
+- Pick Mint, Sky, Lavender, Rose, Peach, or Gold in Appearance settings.
+- Optionally follow your pointer to the active display, keeping the same shelf.
 
 The app has no account, cloud service, or AI dependency. Captures remain in
 memory until you copy or export them. Capture coverage and paste support vary
@@ -56,9 +59,9 @@ Command Line Tools alone can build the app but cannot compile the test target.
 GitHub Actions runs the build and the suite on every push and pull request
 (`.github/workflows/tests.yml`).
 
-The current suite has **301 tests**, covering the capture entry path, capture
+The current suite has **362 tests**, covering the capture entry path, capture
 formatting, clipboard preparation, selection, shortcuts, shelf motion, and
-auto-collapse.
+auto-collapse, plus theme preferences and display following.
 See [verification notes](docs/VERIFICATION.md) for the historical checks and
 [the user guide](docs/USER_GUIDE.md) for permissions and signing troubleshooting.
 

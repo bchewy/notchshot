@@ -11,6 +11,7 @@ final class CaptureCardController {
     private let store: CaptureStore
     private let presentsWindow: Bool
     private let reduceMotion: () -> Bool
+    private let compactLandingFrame: () -> CGRect?
     private let panel = CaptureCardPanel()
     private let canvas = CaptureCardTransitionView()
     private var host: NSHostingView<CaptureCardView>?
@@ -26,10 +27,14 @@ final class CaptureCardController {
     var isAnimating: Bool { displayLink != nil }
 
     init(store: CaptureStore, presentsWindow: Bool = true,
-         reduceMotion: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }) {
+         reduceMotion: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion },
+         compactLandingFrame: @escaping () -> CGRect? = {
+             NotchGeometry.preferredScreen.map { NotchGeometry.frame(on: $0, size: CGSize(width: 28, height: 18)) }
+         }) {
         self.store = store
         self.presentsWindow = presentsWindow
         self.reduceMotion = reduceMotion
+        self.compactLandingFrame = compactLandingFrame
         panel.onEscape = { [weak store] in store?.dismissPendingCapture() }
     }
 
@@ -118,9 +123,7 @@ final class CaptureCardController {
     func landInShelf(completion: @escaping () -> Void) {
         guard let id = captureID, !isDragging else { return }
         cancelAnimation()
-        let compactDestination = NotchGeometry.preferredScreen.map {
-            NotchGeometry.frame(on: $0, size: CGSize(width: 28, height: 18))
-        }
+        let compactDestination = compactLandingFrame()
         let target = store.shelfLandingFrame ?? (!store.openShelfAfterCapture ? compactDestination : nil)
         guard !reduceMotion(), let destination = target,
               !destination.isEmpty, destination.width.isFinite, destination.height.isFinite else {
@@ -209,6 +212,9 @@ final class CaptureCardController {
                 completion()
             }
         }
+        // A cross-screen flight may temporarily cross a gap between displays.
+        // Window display links stop delivering frames there, so keep this flight
+        // driven by its starting display until it reaches the destination.
         let link = screen.displayLink(target: target, selector: #selector(CaptureCardDisplayLinkTarget.tick(_:)))
         displayLink = link
         link.add(to: .main, forMode: .common)

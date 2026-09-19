@@ -138,7 +138,7 @@ final class StatusNoticeTests: XCTestCase {
         XCTAssertEqual(notice.title, "Copied")
         XCTAssertEqual(notice.kind, .success)
         XCTAssertNil(notice.revealURL)
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), target.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), target.clipboardText)
         XCTAssertEqual(fixture.clipboard.data(forType: .png), target.pngData)
         XCTAssertEqual(store.selectedID, selected.id)
         XCTAssertEqual(store.page, .shelf)

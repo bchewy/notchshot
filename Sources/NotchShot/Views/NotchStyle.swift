@@ -2,7 +2,6 @@
 import SwiftUI
 
 enum NotchStyle {
-    static let accent = Color(red: 0.54, green: 0.91, blue: 0.77)
     static let subtle = Color.white.opacity(0.055)
     static let border = Color.white.opacity(0.09)
     static let expandedWidth: CGFloat = 440
@@ -39,6 +38,7 @@ struct NotchSurface: Shape {
 }
 
 struct NotchActionStyle: ButtonStyle {
+    @Environment(\.notchTheme) private var theme
     var prominent = false
 
     func makeBody(configuration: Configuration) -> some View {
@@ -47,7 +47,7 @@ struct NotchActionStyle: ButtonStyle {
             .foregroundStyle(prominent ? Color.black : Color.white.opacity(0.88))
             .padding(.horizontal, 9)
             .frame(height: 33)
-            .background(prominent ? NotchStyle.accent : NotchStyle.subtle, in: RoundedRectangle(cornerRadius: 9))
+            .background(prominent ? theme.accent : NotchStyle.subtle, in: RoundedRectangle(cornerRadius: 9))
             .overlay {
                 if !prominent {
                     RoundedRectangle(cornerRadius: 9).strokeBorder(NotchStyle.border, lineWidth: 1)

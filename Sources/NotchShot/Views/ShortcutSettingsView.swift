@@ -2,6 +2,7 @@
 import SwiftUI
 
 struct ShortcutSettingsView: View {
+    @Environment(\.notchTheme) private var theme
     let shortcut: CaptureShortcut
     @Binding var isRecording: Bool
     @Binding var bothShiftEnabled: Bool
@@ -20,7 +21,7 @@ struct ShortcutSettingsView: View {
             Toggle("Shift + Shift to capture", isOn: $bothShiftEnabled)
                 .toggleStyle(.checkbox)
                 .font(.system(size: 11))
-                .tint(NotchStyle.accent)
+                .tint(theme.accent)
             Text("Press left Shift + right Shift together.")
                 .font(.system(size: 10))
                 .foregroundStyle(Color.white.opacity(0.45))

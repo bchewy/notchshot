@@ -67,10 +67,10 @@ struct CaptureCardView: View {
                 Spacer(minLength: 0)
                 Button("Add to shelf", action: store.acceptPendingCapture)
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(NotchStyle.accent)
+                    .foregroundStyle(store.theme.accent)
                     .padding(.horizontal, 8)
                     .frame(height: 24)
-                    .background(NotchStyle.accent.opacity(0.11), in: RoundedRectangle(cornerRadius: 6))
+                    .background(store.theme.accent.opacity(0.11), in: RoundedRectangle(cornerRadius: 6))
                     .buttonStyle(.plain)
                     .disabled(store.isCapturing)
                     .opacity(store.isCapturing ? 0.35 : 1)
@@ -82,7 +82,7 @@ struct CaptureCardView: View {
         .padding(12)
         .frame(width: 268, height: 218)
         .background(Color(red: 0.065, green: 0.078, blue: 0.073), in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(NotchStyle.accent.opacity(0.30), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(store.theme.accent.opacity(0.30), lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: 16))
         .preferredColorScheme(.dark)
     }
@@ -95,7 +95,7 @@ struct CaptureCardView: View {
         } else {
             Image(systemName: "macwindow")
                 .font(.system(size: 16)).frame(width: 22, height: 22)
-                .foregroundStyle(NotchStyle.accent)
+                .foregroundStyle(store.theme.accent)
         }
     }
 }
@@ -163,7 +163,7 @@ private final class CaptureDragImageView: NSView, NSDraggingSource {
         guard hypot(delta.x, delta.y) >= 3 else { return }
         let payload = NSPasteboardItem()
         payload.setString(capture.id.uuidString, forType: CaptureCardPasteboard.captureID)
-        payload.setString(capture.contextText, forType: .string)
+        payload.setString(capture.clipboardText, forType: .string)
         if let png = capture.pngData { payload.setData(png, forType: .png) }
         let item = NSDraggingItem(pasteboardWriter: payload)
         let preview = image ?? NSImage(systemSymbolName: "text.alignleft", accessibilityDescription: "App text")
