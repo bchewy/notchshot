@@ -1,8 +1,8 @@
 # NotchShot website
 
-A static landing page with the original demo video, prepared for the 0.6.0
-preview. No dependencies or build step. Publish the matching release assets
-before deploying this page; its new download links require those assets.
+A static landing page with the original demo video and the published 0.5.2
+preview downloads. No dependencies or build step. The app source is preparing
+0.6.0; merging source changes does not replace the downloadable app.
 
 ## Preview locally
 
@@ -20,16 +20,18 @@ Open <http://127.0.0.1:4175>.
 - `dist/assets/`: demo video and poster.
 - `dist/downloads/`: immutable preview app, corresponding source, and notices.
 
-The page links to versioned assets on the [GitHub release](https://github.com/bchewy/notchshot/releases/tag/v0.6.0):
+The page links to the paired, checked-in release snapshots:
 
-- [NotchShot 0.6.0 app](https://github.com/bchewy/notchshot/releases/download/v0.6.0/NotchShot-0.6.0.zip)
-- [Corresponding source](https://github.com/bchewy/notchshot/releases/download/v0.6.0/NotchShot-0.6.0-source.zip)
+- `dist/downloads/NotchShot-0.5.2.zip`
+- `dist/downloads/NotchShot-0.5.2-source.zip`
 
-Check matching copies of both ZIPs into `dist/downloads/` when publishing, to
-preserve the complete static site. Until that step, this directory retains the
-earlier 0.5.2 snapshots. These are immutable releases, not the development source
-of truth. App and source archives must describe the same source revision; the
-copies on GitHub and in the static site must have matching checksums.
+These are immutable releases, not the development source of truth. Keep their
+links and the page's version/features aligned with the published app until the
+next release is signed and verified. For 0.6.0, follow [the release procedure](../docs/RELEASING.md)
+to publish versioned assets on GitHub, then add matching copies to
+`dist/downloads/` and update the page. App and source archives must describe the
+same source revision; copies on GitHub and the static site must have matching
+checksums.
 
 When publishing an update, build and verify the app and corresponding-source
 ZIPs first. Publish both GitHub release assets, check their downloaded checksums,

@@ -28,7 +28,8 @@ by destination app.
 ## Build and run
 
 Requires **macOS 15+** and **Swift 6**. Building needs only the Xcode Command Line
-Tools. The 0.6.0 preview targets Apple silicon and is not notarized. See the
+Tools. This source prepares 0.6.0; the website still offers the published 0.5.2
+preview. Both target Apple silicon and are not notarized. See the
 [release notes](docs/releases/0.6.0.md) for changes and remaining verification limits.
 
 ```sh
