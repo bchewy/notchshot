@@ -199,7 +199,7 @@ final class BatchClipboardTests: XCTestCase {
         let batch = CaptureBatch(captures: [first, second], contextStyle: .compact)
         let item = CaptureClipboardService.makeItem(for: batch)
         XCTAssertTrue(CaptureClipboardService.matchesBatchIdentity(item: item, batch: batch))
-        XCTAssertEqual(item.string(forType: CaptureClipboardService.batchIdentifierType), CaptureClipboardService.batchIdentifier(for: batch))
+        XCTAssertEqual(item.string(forType: CaptureClipboardService.batchIdentifierType), batch.identity)
         XCTAssertFalse(CaptureClipboardService.matchesBatchIdentity(item: item, batch: CaptureBatch(captures: [second, first], contextStyle: .compact)))
         XCTAssertFalse(CaptureClipboardService.matchesBatchIdentity(item: item, batch: CaptureBatch(captures: [first, second], contextStyle: .full)))
         second.pngData = first.pngData

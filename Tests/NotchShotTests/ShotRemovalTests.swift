@@ -96,7 +96,7 @@ final class ShotRemovalTests: XCTestCase {
         store.page = .settings
         store.pendingCapture = incoming
         store.isCapturing = true
-        store.statusMessage = "Reading accessibility text…"
+        store.report(.info, "Capturing", message: "Reading accessibility text…")
         var dismissals = 0
         store.onDismissCard = { dismissals += 1 }
 
@@ -106,7 +106,7 @@ final class ShotRemovalTests: XCTestCase {
         XCTAssertEqual(store.selectedID, saved.id)
         XCTAssertEqual(store.pendingCapture?.id, incoming.id)
         XCTAssertTrue(store.isCapturing)
-        XCTAssertEqual(store.statusMessage, "Reading accessibility text…")
+        XCTAssertEqual(store.statusNotice?.message, "Reading accessibility text…")
         XCTAssertEqual(store.page, .settings)
         XCTAssertFalse(store.isExpanded)
         XCTAssertEqual(dismissals, 0)
@@ -188,7 +188,7 @@ final class ShotRemovalTests: XCTestCase {
         XCTAssertTrue(store.canReceiveDrop(pasteboard))
 
         store.removeCapture(removed.id)
-        let statusAfterRemoval = store.statusMessage
+        let statusAfterRemoval = store.statusNotice?.message
 
         XCTAssertFalse(store.canReceiveDrop(pasteboard))
         XCTAssertFalse(store.receiveDrop(pasteboard))
@@ -196,18 +196,17 @@ final class ShotRemovalTests: XCTestCase {
         XCTAssertEqual(store.selectedID, retained.id)
         XCTAssertFalse(store.isImporting)
         XCTAssertFalse(store.isExpanded)
-        XCTAssertEqual(store.statusMessage, statusAfterRemoval)
+        XCTAssertEqual(store.statusNotice?.message, statusAfterRemoval)
     }
 
     @MainActor
     private func makeStore() -> CaptureStore {
-        let suite = "NotchShotRemovalTests-\(UUID())"
-        let preferences = UserDefaults(suiteName: suite)!
-        addTeardownBlock { preferences.removePersistentDomain(forName: suite) }
+        let (preferences, clipboard) = isolatedStoreDependencies()
         return CaptureStore(preferences: preferences,
                             landingPreviewDelay: .milliseconds(1),
                             shelfPreparationDelay: .milliseconds(1),
-                            captureSound: SilentRemovalTestSound())
+                            captureSound: SilentRemovalTestSound(),
+                            clipboard: clipboard)
     }
 
     private func makeCapture(_ name: String) -> CaptureResult {

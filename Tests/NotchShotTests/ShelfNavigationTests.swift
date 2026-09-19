@@ -294,13 +294,11 @@ final class ShelfNavigationTests: XCTestCase {
 
     @MainActor
     private func makeStore(previewDelay: Duration = .milliseconds(1)) -> CaptureStore {
-        let suiteName = "NotchShot.NavigationTests.\(UUID())"
-        let preferences = UserDefaults(suiteName: suiteName)!
+        let (preferences, clipboard) = isolatedStoreDependencies()
         preferences.set(false, forKey: "captureSoundEnabled")
-        let store = CaptureStore(preferences: preferences,
-                                 landingPreviewDelay: previewDelay, shelfPreparationDelay: .milliseconds(1))
-        preferences.removePersistentDomain(forName: suiteName)
-        return store
+        return CaptureStore(preferences: preferences,
+                            landingPreviewDelay: previewDelay, shelfPreparationDelay: .milliseconds(1),
+                            clipboard: clipboard)
     }
 
     private func makeCapture() -> CaptureResult {

@@ -146,13 +146,6 @@ final class CaptureStore {
         didSet { if oldValue != selectedID { cancelCopyCollapse() } }
     }
     var activeAppName = "your active app"
-    var statusMessage: String? {
-        didSet {
-            if let message = statusMessage, !message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                statusNotice = StatusNotice(message: message)
-            } else { statusNotice = nil }
-        }
-    }
     private(set) var statusNotice: StatusNotice?
     var accessibilityGranted = false
     var screenRecordingGranted = false
@@ -182,14 +175,17 @@ final class CaptureStore {
     @ObservationIgnored private var lastExternalTarget: CaptureTarget?
     @ObservationIgnored private var activationObserver: NSObjectProtocol?
     @ObservationIgnored private var permissionTimer: Timer?
-    @ObservationIgnored private let captureService = CaptureService()
+    @ObservationIgnored private let captureService: any CaptureServing
+    @ObservationIgnored private var captureTask: Task<Void, Never>?
     @ObservationIgnored private var historyRevision = 0
     @ObservationIgnored private var landingTask: Task<Void, Never>?
     @ObservationIgnored private var landingRevision = 0
     @ObservationIgnored private let landingPreviewDelay: Duration
     @ObservationIgnored private let shelfPreparationDelay: Duration
     @ObservationIgnored private let copyCollapseDelay: Duration
-    @ObservationIgnored private var copyCollapseTask: Task<Void, Never>?
+    @ObservationIgnored private let copyCollapseSchedule: NotchIdleTimer.Schedule
+    @ObservationIgnored private var cancelCopyCollapseDeadline: (() -> Void)?
+    @ObservationIgnored private var copyCollapseGeneration = 0
     private var isDraggingCard = false {
         didSet { cancelCopyCollapse() }
     }
@@ -211,16 +207,21 @@ final class CaptureStore {
     @ObservationIgnored private var batchPreparationTask: Task<Void, Never>?
     @ObservationIgnored private var batchPreparationRevision = 0
 
-    init(preferences: UserDefaults = .standard,
+    /// Preferences and the pasteboard have no defaults so a test cannot reach
+    /// the real ones without saying so.
+    init(preferences: UserDefaults,
          landingPreviewDelay: Duration = .milliseconds(550),
          shelfPreparationDelay: Duration = .milliseconds(280),
          captureSound: (any CaptureSoundPlaying)? = nil,
-         clipboard: NSPasteboard = .general,
+         clipboard: NSPasteboard,
          copySound: (any CopySoundPlaying)? = nil,
          copyCollapseDelay: Duration = .milliseconds(180),
+         copyCollapseSchedule: @escaping NotchIdleTimer.Schedule = NotchIdleTimer.scheduleTask,
          assistedPaste: (any AssistedPasteServing)? = nil,
-         idleSchedule: @escaping NotchIdleTimer.Schedule = NotchIdleTimer.scheduleTask) {
+         idleSchedule: @escaping NotchIdleTimer.Schedule = NotchIdleTimer.scheduleTask,
+         captureService: (any CaptureServing)? = nil) {
         self.preferences = preferences
+        self.captureService = captureService ?? CaptureService()
         self.captureSound = captureSound ?? CaptureSoundService()
         self.clipboard = clipboard
         self.copySound = copySound ?? CopySoundService()
@@ -228,6 +229,7 @@ final class CaptureStore {
         self.landingPreviewDelay = landingPreviewDelay
         self.shelfPreparationDelay = shelfPreparationDelay
         self.copyCollapseDelay = copyCollapseDelay
+        self.copyCollapseSchedule = copyCollapseSchedule
         batchContextStyle = preferences.string(forKey: "batchContextStyle")
             .flatMap(BatchContextStyle.init(rawValue:)) ?? .compact
         captureShortcut = CaptureShortcut.load(from: preferences)
@@ -257,8 +259,9 @@ final class CaptureStore {
         self.assistedPaste.onResult = { [weak self] result in
             switch result {
             case .eventsSent: break
-            case .cancelled(let reason): self?.statusMessage = reason
-            case .unavailable(let reason): self?.statusMessage = reason
+            case .cancelled(let reason): self?.report(.info, "Paste assistance", message: reason)
+            case .unavailable(let reason): self?.report(.info, "Paste assistance", message: reason)
+            case .failed(let reason): self?.reportError(reason)
             }
         }
     }
@@ -296,13 +299,17 @@ final class CaptureStore {
         }
     }
 
+    /// Work the notch must not close under. Both collapse policies derive from
+    /// this one list, so a new busy state is added here and nowhere else.
+    private var isInteractionInProgress: Bool {
+        isCapturing || isImporting || isDropTargeted || isDraggingCard || isLandingCapture
+            || isRecordingShortcut || isPresentingExport || pendingCapture != nil || isPreparingBatch
+    }
+
     private func refreshAutoCollapse(restart: Bool = false) {
         let eligible = !idleTimerStopped && autoCollapseEnabled && isExpanded && notchSurfaceVisible
             && !pointerInsideNotch && !notchKeyboardFocused && !notchMenuTracking
-            && !notchMouseButtonDown && autoCollapseProtections.isEmpty
-            && !isCapturing && !isImporting && !isDropTargeted && !isDraggingCard
-            && !isLandingCapture && !isRecordingShortcut && !isPresentingExport && pendingCapture == nil
-            && !isPreparingBatch
+            && !notchMouseButtonDown && autoCollapseProtections.isEmpty && !isInteractionInProgress
         idleTimer?.update(eligible: eligible, delay: .seconds(autoCollapseDelay), restart: restart)
     }
 
@@ -320,9 +327,18 @@ final class CaptureStore {
     }
     var hasAvailableCaptureShortcut: Bool { usesBothShiftForCaptureHint || shortcutAvailable }
 
+    /// Feedback shown in the notch. The producer names the kind and title, so
+    /// rewording a message can never change how long it stays or how it looks.
+    func report(_ kind: StatusNotice.Kind, _ title: String, message: String, revealURL: URL? = nil) {
+        statusNotice = StatusNotice(kind: kind, title: title, message: message, revealURL: revealURL)
+    }
+
     func reportError(_ message: String) {
-        statusMessage = message
-        statusNotice = StatusNotice(message: message, kind: .error)
+        report(.error, "Needs attention", message: message)
+    }
+
+    func clearStatus() {
+        statusNotice = nil
     }
 
     func beginShelfSelection() {
@@ -410,12 +426,12 @@ final class CaptureStore {
         let compact = batch.isShortened ? " Compact context; full text remains in your shots." : ""
         let unavailable = batch.omittedScreenshotNumbers.isEmpty ? "" :
             " Screenshots unavailable for shots \(batch.omittedScreenshotNumbers.map(String.init).joined(separator: ", ")); their text is included."
-        statusMessage = "\(label) copied.\(compact)\(unavailable)"
+        report(.success, "Copied", message: "\(label) copied.\(compact)\(unavailable)")
         if pasteImageThenText && !batch.imagePNGs.isEmpty {
             if captureShortcut == CaptureShortcut(keyCode: UInt16(kVK_ANSI_V), modifierFlags: .command) {
-                statusMessage = "\(label) copied. Choose a capture shortcut other than ⌘V to use paste assistance."
+                report(.info, "Paste assistance", message: "\(label) copied. Choose a capture shortcut other than ⌘V to use paste assistance.")
             } else if assistedPaste.arm(batch: batch, clipboard: clipboard) {
-                statusMessage = "\(label) copied. Your next ⌘V pastes the screenshots in order, then their context. Wait for pasting to finish.\(compact)\(unavailable)"
+                report(.info, "Paste assistance", message: "\(label) copied. Your next ⌘V pastes the screenshots in order, then their context. Wait for pasting to finish.\(compact)\(unavailable)")
             }
         }
         confirmManualCopy()
@@ -461,7 +477,7 @@ final class CaptureStore {
         candidate.save(to: preferences)
         shortcutAvailable = true
         shortcutError = nil
-        statusMessage = "Capture shortcut set to \(candidate.displayString)."
+        report(.success, "Shortcut saved", message: "Capture shortcut set to \(candidate.displayString).")
     }
 
     func resetCaptureShortcut() {
@@ -476,11 +492,16 @@ final class CaptureStore {
     func start() {
         idleTimerStopped = false
         refreshAutoCollapse()
-        updateTarget(NSWorkspace.shared.frontmostApplication)
+        updateTarget(captureService.frontmostTarget())
         refreshPermissions()
-        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] notification in
-            let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-            Task { @MainActor in self?.updateTarget(app); self?.refreshPermissions() }
+        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                // The app in front now, not the one the notification named. They
+                // agree in practice, and this keeps the store on the capture seam.
+                self.updateTarget(self.captureService.frontmostTarget())
+                self.refreshPermissions()
+            }
         }
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -501,28 +522,29 @@ final class CaptureStore {
         cancelCopyCollapse()
         isRecordingShortcut = false
         cancelLanding()
+        cancelCapture()
         permissionTimer?.invalidate()
         if let activationObserver { NSWorkspace.shared.notificationCenter.removeObserver(activationObserver) }
     }
 
-    private func updateTarget(_ app: NSRunningApplication?) {
-        guard let app, app.processIdentifier != ProcessInfo.processInfo.processIdentifier, app.activationPolicy == .regular else { return }
-        lastExternalTarget = CaptureTarget(pid: app.processIdentifier, appName: app.localizedName ?? "Application", bundleIdentifier: app.bundleIdentifier ?? "")
-        activeAppName = lastExternalTarget?.appName ?? "your active app"
+    private func updateTarget(_ target: CaptureTarget?) {
+        guard let target else { return }
+        lastExternalTarget = target
+        activeAppName = target.appName
     }
 
     func captureFrontmost() {
         guard !isCapturing, !isPresentingExport, !isImporting, !isDraggingCard, !isRecordingShortcut else { return }
         assistedPaste.cancel()
-        updateTarget(NSWorkspace.shared.frontmostApplication)
+        updateTarget(captureService.frontmostTarget())
         guard let target = lastExternalTarget else {
-            statusMessage = "Open an app window, then press \(captureHintLabel) to capture it."
+            report(.info, "Open an app", message: "Open an app window, then press \(captureHintLabel) to capture it.")
             showShelf()
             return
         }
         refreshPermissions()
         guard accessibilityGranted || screenRecordingGranted else {
-            statusMessage = "Enable the permissions below, then capture your app."
+            report(.info, "Set up capture", message: "Enable the permissions below, then capture your app.")
             showCaptureSettings()
             return
         }
@@ -536,41 +558,55 @@ final class CaptureStore {
         // A window capture excludes our overlay. Keep the notch where the user
         // left it rather than closing and reopening it around every capture.
         if isExpanded && openShelfAfterCapture { page = .shelf }
-        statusMessage = nil
-        let revision = historyRevision
+        clearStatus()
         captureRevision += 1
         let request = captureRevision
         var sounded = false
-        Task {
+        captureTask = Task {
+            let outcome: Result<CaptureResult, Error>
             do {
-                let result = try await captureService.capture(target: target) { [weak self] partial in
-                    guard let self, revision == self.historyRevision,
+                outcome = .success(try await captureService.capture(target: target) { [weak self] partial in
+                    guard let self, request == self.captureRevision,
                           self.dismissedCaptureRevision != request else { return }
                     self.pendingCapture = partial
                     if self.arrivalSuppressedRevision != request { self.onPresentCard?(partial) }
                     if !sounded { self.playCaptureSound(); sounded = true }
-                }
-                isCapturing = false
-                guard revision == historyRevision else { return }
+                })
+            } catch { outcome = .failure(error) }
+            // A cancelled request has already released the busy flag, and a
+            // newer request may own it now.
+            guard request == captureRevision else { return }
+            isCapturing = false
+            captureTask = nil
+            switch outcome {
+            case .success(let result):
                 guard dismissedCaptureRevision != request else { return }
                 pendingCapture = result
                 autoCopyCompletedCapture(result)
                 if arrivalSuppressedRevision != request { onPresentCard?(result) }
                 if !sounded { playCaptureSound() }
                 scheduleLanding()
-            } catch {
-                isCapturing = false
-                if revision == historyRevision {
-                    dismissPendingCapture()
-                    reportError(error.localizedDescription)
-                    if arrivalSuppressedRevision != request {
-                        if accessibilityGranted || screenRecordingGranted { showShelf() }
-                        else { showCaptureSettings() }
-                    }
+            case .failure(let error):
+                dismissPendingCapture()
+                reportError(error.localizedDescription)
+                if arrivalSuppressedRevision != request {
+                    if accessibilityGranted || screenRecordingGranted { showShelf() }
+                    else { showCaptureSettings() }
                 }
             }
             refreshPermissions()
         }
+    }
+
+    /// Clearing the shelf or stopping the store abandons a capture in flight
+    /// instead of letting it finish, hold its PNG, and block the next capture.
+    /// Bumping the revision makes the abandoned task's callbacks stale, which
+    /// is also why the capture path needs no history check of its own.
+    private func cancelCapture() {
+        captureTask?.cancel()
+        captureTask = nil
+        captureRevision += 1
+        isCapturing = false
     }
 
     func toggleExpanded() {
@@ -588,20 +624,21 @@ final class CaptureStore {
         if captures.isEmpty && page == .detail { page = .shelf }
         // Removing one saved shot must not invalidate another capture/import
         // in flight, move away from surviving shots, or clear the rest of the session.
-        statusMessage = "Removed \(removed.appName) shot."
+        report(.success, "Removed", message: "Removed \(removed.appName) shot.")
     }
 
     func clearHistory() {
         historyRevision += 1
+        cancelCapture()
         dismissPendingCapture()
         captures.removeAll()
         selectedID = nil
         page = .shelf
-        statusMessage = "Session captures cleared."
+        report(.success, "Cleared", message: "Session captures cleared.")
     }
 
     func refreshPermissions() {
-        let permissions = PermissionService.status()
+        let permissions = captureService.permissionStatus()
         accessibilityGranted = permissions.accessibility
         screenRecordingGranted = permissions.screenRecording
         onShortcutSettingsChanged?()
@@ -667,10 +704,13 @@ final class CaptureStore {
         if !preserveNavigation { page = .shelf }
         if expandShelf { isExpanded = true }
         isDropTargeted = false
-        statusMessage = capture.bundleIdentifier.isEmpty
+        let imported = capture.bundleIdentifier.isEmpty
+        let copied = lastAutoCopiedID == capture.id
+        let summary = imported
             ? "Added \(capture.windowTitle) to your shelf."
             : "Captured \(capture.appName) · \(capture.elementCount) accessibility elements"
-        if lastAutoCopiedID == capture.id { statusMessage? += " · copied" }
+        report(.success, copied ? "Copied" : (imported ? "Added" : "Captured"),
+               message: copied ? summary + " · copied" : summary)
     }
 
     private func scheduleLanding() {
@@ -764,7 +804,7 @@ final class CaptureStore {
             let revision = historyRevision
             isImporting = true
             showShelf()
-            statusMessage = "Adding dropped Appshot…"
+            report(.info, "Adding…", message: "Adding dropped Appshot…")
             Task {
                 defer { isImporting = false }
                 do {
@@ -802,7 +842,7 @@ final class CaptureStore {
         if let tiff = NSImage(data: png)?.tiffRepresentation { item.setData(tiff, forType: .tiff) }
         clipboard.clearContents()
         let success = clipboard.writeObjects([item])
-        statusMessage = success ? "Screenshot copied." : "Could not copy the screenshot."
+        if success { report(.success, "Copied", message: "Screenshot copied.") } else { reportError("Could not copy the screenshot.") }
         if success { confirmManualCopy() }
     }
     func copyText() {
@@ -828,7 +868,7 @@ final class CaptureStore {
     func copyCapture(_ id: UUID) -> Bool {
         guard let capture = captures.first(where: { $0.id == id }) else { return false }
         let success = writeCaptureToClipboard(capture)
-        statusMessage = success ? "\(capture.appName) shot copied." : "Could not copy the capture."
+        if success { report(.success, "Copied", message: "\(capture.appName) shot copied.") } else { reportError("Could not copy the capture.") }
         if success { armAssistedPaste(for: capture); confirmManualCopy() }
         return success
     }
@@ -839,10 +879,10 @@ final class CaptureStore {
         guard autoCopyCapture, !isCapturing, lastAutoCopiedID != capture.id else { return }
         if writeCaptureToClipboard(capture) {
             lastAutoCopiedID = capture.id
-            statusMessage = "\(capture.appName) shot copied."
+            report(.success, "Copied", message: "\(capture.appName) shot copied.")
             armAssistedPaste(for: capture)
             playCopySound()
-        } else { statusMessage = "Could not copy the capture." }
+        } else { reportError("Could not copy the capture.") }
     }
 
     private func writeCaptureToClipboard(_ capture: CaptureResult) -> Bool {
@@ -855,11 +895,11 @@ final class CaptureStore {
     private func armAssistedPaste(for capture: CaptureResult) {
         guard pasteImageThenText, capture.pngData != nil else { return }
         guard captureShortcut != CaptureShortcut(keyCode: UInt16(kVK_ANSI_V), modifierFlags: .command) else {
-            statusMessage = "Shot copied. Choose a capture shortcut other than ⌘V to use Paste image, then text."
+            report(.info, "Paste assistance", message: "Shot copied. Choose a capture shortcut other than ⌘V to use Paste image, then text.")
             return
         }
         if assistedPaste.arm(capture: capture, clipboard: clipboard) {
-            statusMessage = "Shot copied. Your next ⌘V pastes the image, then its text."
+            report(.info, "Paste assistance", message: "Shot copied. Your next ⌘V pastes the image, then its text.")
         }
     }
     private func copy(_ text: String, message: String) {
@@ -867,25 +907,23 @@ final class CaptureStore {
         assistedPaste.cancel()
         clipboard.clearContents()
         let success = clipboard.setString(text, forType: .string)
-        statusMessage = success ? message : "Could not copy text."
+        if success { report(.success, "Copied", message: message) } else { reportError("Could not copy text.") }
         if success { confirmManualCopy() }
     }
 
     private var canCollapseAfterCopy: Bool {
-        collapseAfterCopy && isExpanded && page != .settings && !isCapturing
-            && !isImporting && !isDropTargeted && !isDraggingCard && !isLandingCapture
-            && !isRecordingShortcut && !isPresentingExport && !isPreparingBatch && pendingCapture == nil
+        collapseAfterCopy && isExpanded && page != .settings && !isInteractionInProgress
     }
 
     private func confirmManualCopy() {
         playCopySound()
         cancelCopyCollapse()
         guard canCollapseAfterCopy else { return }
-        let delay = copyCollapseDelay
-        copyCollapseTask = Task { [weak self] in
-            do { try await Task.sleep(for: delay) } catch { return }
-            guard !Task.isCancelled, let self, self.canCollapseAfterCopy else { return }
-            self.copyCollapseTask = nil
+        let generation = copyCollapseGeneration
+        cancelCopyCollapseDeadline = copyCollapseSchedule(copyCollapseDelay) { [weak self] in
+            // Cancellation may race with a callback that is already queued.
+            guard let self, self.copyCollapseGeneration == generation, self.canCollapseAfterCopy else { return }
+            self.cancelCopyCollapseDeadline = nil
             // Reuse the interruptible native spring and Reduce Motion handling.
             self.collapse()
         }
@@ -893,8 +931,9 @@ final class CaptureStore {
 
     /// Explicit navigation inside a detail page also owns the next interaction.
     func cancelCopyCollapse() {
-        copyCollapseTask?.cancel()
-        copyCollapseTask = nil
+        copyCollapseGeneration &+= 1
+        cancelCopyCollapseDeadline?()
+        cancelCopyCollapseDeadline = nil
         refreshAutoCollapse(restart: true)
     }
 
@@ -927,11 +966,9 @@ final class CaptureStore {
                 guard response == .OK, let directory = panel.url else { return }
                 do {
                     let folder = try ExportService.export(capture, to: directory)
-                    let message = "Exported to \(folder.lastPathComponent)."
-                    self.statusMessage = message
-                    self.statusNotice = StatusNotice(message: message, revealURL: folder)
+                    self.report(.success, "Exported", message: "Exported to \(folder.lastPathComponent).", revealURL: folder)
                     NSWorkspace.shared.activateFileViewerSelecting([folder])
-                } catch { self.statusMessage = "Export failed: \(error.localizedDescription)" }
+                } catch { self.reportError("Export failed: \(error.localizedDescription)") }
             }
         }
     }

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: MIT
+import CryptoKit
 import Foundation
 
 enum BatchContextStyle: String, CaseIterable, Identifiable, Sendable {
@@ -31,6 +32,10 @@ struct CaptureBatch: Sendable {
     let isShortened: Bool
     let removedDuplicateLines: Int
     let unavailableImageIDs: Set<UUID>
+    /// A digest of the style, text, shot order, and every shot's PNG bytes.
+    /// The clipboard item carries it so assisted paste can prove the item is
+    /// this batch without hashing the images again on the main actor.
+    let identity: String
 
     var omittedScreenshotNumbers: [Int] {
         captures.enumerated().compactMap { unavailableImageIDs.contains($0.element.id) ? $0.offset + 1 : nil }
@@ -54,6 +59,7 @@ struct CaptureBatch: Sendable {
             characterCount = full.count
             isShortened = false
             removedDuplicateLines = 0
+            identity = Self.identity(style: contextStyle, contextText: full, captures: orderedCaptures)
             return
         }
 
@@ -74,6 +80,24 @@ struct CaptureBatch: Sendable {
         characterCount = contextText.count
         isShortened = excerpts.contains(where: \.isShortened)
         removedDuplicateLines = excerpts.reduce(0) { $0 + $1.removedDuplicateLines }
+        identity = Self.identity(style: contextStyle, contextText: contextText, captures: orderedCaptures)
+    }
+
+    private static func identity(style: BatchContextStyle, contextText: String, captures: [CaptureResult]) -> String {
+        var digest = SHA256()
+        func append(_ bytes: Data) {
+            var length = UInt64(bytes.count).bigEndian
+            withUnsafeBytes(of: &length) { digest.update(data: Data($0)) }
+            digest.update(data: bytes)
+        }
+        append(Data("NotchShot batch v1".utf8))
+        append(Data(style.rawValue.utf8))
+        append(Data(contextText.utf8))
+        for capture in captures {
+            append(Data(capture.id.uuidString.utf8))
+            append(capture.pngData ?? Data())
+        }
+        return digest.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     private struct Excerpt {

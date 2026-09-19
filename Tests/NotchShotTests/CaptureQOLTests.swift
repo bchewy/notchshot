@@ -80,11 +80,11 @@ final class CaptureQOLTests: XCTestCase {
         XCTAssertEqual(store.captures.map(\.id), [selected.id, hovered.id])
 
         let changeCount = fixture.clipboard.changeCount
-        let status = store.statusMessage
+        let status = store.statusNotice?.message
         XCTAssertFalse(store.copyCapture(UUID()))
         XCTAssertEqual(fixture.clipboard.changeCount, changeCount, "A stale hover must leave the user's clipboard intact.")
         XCTAssertEqual(fixture.clipboard.string(forType: .string), hovered.contextText)
-        XCTAssertEqual(store.statusMessage, status)
+        XCTAssertEqual(store.statusNotice?.message, status)
     }
 
     @MainActor

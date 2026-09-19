@@ -24,8 +24,8 @@ by destination app.
 
 ## Build and run
 
-Requires **macOS 15+** and **Swift 6 / Xcode Command Line Tools**. The downloadable
-0.5.2 preview is built for Apple silicon and is not notarized.
+Requires **macOS 15+** and **Swift 6**. Building needs only the Xcode Command Line
+Tools. The downloadable 0.5.2 preview is built for Apple silicon and is not notarized.
 
 ```sh
 git clone https://github.com/bchewy/notchshot.git
@@ -51,8 +51,14 @@ swift test --disable-sandbox
 bash -n script/build_and_run.sh
 ```
 
-The current suite has **295 passing tests**, covering capture formatting,
-clipboard preparation, selection, shortcuts, shelf motion, and auto-collapse.
+Running the tests needs full Xcode, because XCTest ships only with Xcode. The
+Command Line Tools alone can build the app but cannot compile the test target.
+GitHub Actions runs the build and the suite on every push and pull request
+(`.github/workflows/tests.yml`).
+
+The current suite has **301 tests**, covering the capture entry path, capture
+formatting, clipboard preparation, selection, shortcuts, shelf motion, and
+auto-collapse.
 See [verification notes](docs/VERIFICATION.md) for the historical checks and
 [the user guide](docs/USER_GUIDE.md) for permissions and signing troubleshooting.
 

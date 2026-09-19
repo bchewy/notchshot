@@ -47,7 +47,7 @@ Taking a capture no longer closes an already open notch. The receiving shelf ope
 
 ## Shelf hover previews (0.4.1)
 
-Saved thumbnails gain a gentle mint highlight. After a 220 ms dwell, a passive 320 × 264-point panel fades in over 140 ms below the shelf. It shows the full screenshot fitted within its preview area or a bounded text excerpt, plus app/window identity, capture time, and available context. The notch remains 440 × 180 and hover does not change selection.
+Saved thumbnails gain a gentle mint highlight. After a 120 ms dwell, a passive 320 × 264-point panel fades in over 140 ms below the shelf. It shows the full screenshot fitted within its preview area or a bounded text excerpt, plus app/window identity, capture time, and available context. The notch remains 440 × 180 and hover does not change selection.
 
 A small AppKit tracking view supplies the visible thumbnail geometry. The separate nonactivating child panel cannot become key or main and ignores mouse events, so clicking the shot still opens details. Exit, navigation, collapse, capture/import/drop, removal, and window geometry changes cancel the preview. Dwell callbacks check ownership, pointer location, and unchanged geometry. Reduce Motion shows the panel immediately after the same dwell without an entrance animation.
 

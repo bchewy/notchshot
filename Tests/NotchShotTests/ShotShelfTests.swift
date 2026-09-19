@@ -175,7 +175,8 @@ final class ShotShelfTests: XCTestCase {
 
     @MainActor
     private func makeStore() -> CaptureStore {
-        let store = CaptureStore()
+        let (preferences, clipboard) = isolatedStoreDependencies()
+        let store = CaptureStore(preferences: preferences, clipboard: clipboard)
         store.autoCollectCaptures = false
         return store
     }

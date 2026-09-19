@@ -154,13 +154,11 @@ final class CaptureSoundTests: XCTestCase {
     @MainActor
     func testSavedSelectionIsRestoredAndPreviewUsesItWhileMuted() throws {
         let alternative = try XCTUnwrap(CaptureShutterSound.allCases.first { $0 != .defaultSound })
-        let suite = "NotchShotCaptureSoundTests-\(UUID().uuidString)"
-        let preferences = UserDefaults(suiteName: suite)!
-        defer { preferences.removePersistentDomain(forName: suite) }
+        let (preferences, clipboard) = isolatedStoreDependencies()
         preferences.set(false, forKey: "captureSoundEnabled")
         preferences.set(alternative.rawValue, forKey: "captureShutterSound")
         let sound = SoundSpy()
-        let store = CaptureStore(preferences: preferences, captureSound: sound)
+        let store = CaptureStore(preferences: preferences, captureSound: sound, clipboard: clipboard)
         defer { store.stop() }
 
         XCTAssertEqual(store.captureShutterSound, alternative)
@@ -175,12 +173,10 @@ final class CaptureSoundTests: XCTestCase {
 
     @MainActor
     func testUnknownSavedSoundUsesExistingDefault() {
-        let suite = "NotchShotCaptureSoundTests-\(UUID().uuidString)"
-        let preferences = UserDefaults(suiteName: suite)!
-        defer { preferences.removePersistentDomain(forName: suite) }
+        let (preferences, clipboard) = isolatedStoreDependencies()
         preferences.set("missing-camera-model", forKey: "captureShutterSound")
         let sound = SoundSpy()
-        let store = CaptureStore(preferences: preferences, captureSound: sound)
+        let store = CaptureStore(preferences: preferences, captureSound: sound, clipboard: clipboard)
         defer { store.stop() }
         XCTAssertEqual(store.captureShutterSound, .defaultSound)
         XCTAssertEqual(sound.selectedChoices, [.defaultSound])
@@ -188,12 +184,10 @@ final class CaptureSoundTests: XCTestCase {
 
     @MainActor
     func testExplicitPreviewPlaysWhileMutedWithoutChangingPreferenceOrShelf() {
-        let suite = "NotchShotCaptureSoundTests-\(UUID().uuidString)"
-        let preferences = UserDefaults(suiteName: suite)!
-        defer { preferences.removePersistentDomain(forName: suite) }
+        let (preferences, clipboard) = isolatedStoreDependencies()
         preferences.set(false, forKey: "captureSoundEnabled")
         let sound = SoundSpy()
-        let store = CaptureStore(preferences: preferences, captureSound: sound)
+        let store = CaptureStore(preferences: preferences, captureSound: sound, clipboard: clipboard)
         defer { store.stop() }
 
         store.previewCaptureSound()

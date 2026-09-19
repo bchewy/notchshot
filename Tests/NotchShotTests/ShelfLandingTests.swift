@@ -210,7 +210,9 @@ final class ShelfLandingTests: XCTestCase {
 
     @MainActor
     private func makeStore(preparationDelay: Duration = .milliseconds(1)) -> CaptureStore {
-        CaptureStore(landingPreviewDelay: .milliseconds(1), shelfPreparationDelay: preparationDelay)
+        let (preferences, clipboard) = isolatedStoreDependencies()
+        return CaptureStore(preferences: preferences, landingPreviewDelay: .milliseconds(1),
+                            shelfPreparationDelay: preparationDelay, clipboard: clipboard)
     }
 
     private func makeCapture() -> CaptureResult {

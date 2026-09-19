@@ -33,7 +33,7 @@ final class CopyCollapseTests: XCTestCase {
                 XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.contextText)
                 XCTAssertEqual(fixture.clipboard.data(forType: .png), capture.pngData)
             }
-            try await settle()
+            try await settle(untilCollapsed: store)
             XCTAssertFalse(store.isExpanded, "Successful \(name) copy should close the notch.")
             XCTAssertEqual(store.captures.map(\.id), [capture.id], "Collapsing must retain the saved shot.")
         }
@@ -59,7 +59,7 @@ final class CopyCollapseTests: XCTestCase {
         XCTAssertEqual(store.selectedID, selected.id)
         XCTAssertEqual(store.page, .shelf)
         XCTAssertTrue(store.isExpanded)
-        try await settle()
+        try await settle(untilCollapsed: store)
         XCTAssertFalse(store.isExpanded)
         XCTAssertEqual(store.selectedID, selected.id)
     }
@@ -90,7 +90,7 @@ final class CopyCollapseTests: XCTestCase {
         store.copySoundEnabled = false
         let previousPlays = fixture.sound.playCount
         XCTAssertTrue(store.copyCapture(capture.id))
-        try await settle()
+        try await settle(untilCollapsed: store)
         XCTAssertFalse(store.isExpanded)
         XCTAssertEqual(fixture.sound.playCount, previousPlays)
         XCTAssertTrue(fixture.preferences.bool(forKey: "collapseAfterCopy"))
@@ -169,17 +169,21 @@ final class CopyCollapseTests: XCTestCase {
     }
 
     @MainActor
-    func testCloseThenReopenCancelsStaleCopyDeadline() async throws {
-        let fixture = makeFixture()
+    func testCloseThenReopenCancelsStaleCopyDeadline() {
+        let clock = VirtualCopyCollapseClock()
+        let fixture = makeFixture(schedule: clock.schedule)
         let store = fixture.store
         defer { store.stop() }
         let capture = makeCapture("Reopened")
         store.captures = [capture]
         store.isExpanded = true
         XCTAssertTrue(store.copyCapture(capture.id))
+        let oldDeadline = clock.latestID
         store.collapse()
         store.showShelf()
-        try await settle()
+        XCTAssertEqual(clock.activeCount, 0)
+        clock.invokeEvenIfCancelled(oldDeadline)
+        clock.advance(by: .seconds(1))
         XCTAssertTrue(store.isExpanded, "An old copy must not close a shelf the user deliberately reopened.")
     }
 
@@ -233,24 +237,29 @@ final class CopyCollapseTests: XCTestCase {
     }
 
     @MainActor
-    func testTurningSettingOffOrStoppingCancelsPendingClose() async throws {
+    func testTurningSettingOffOrStoppingCancelsPendingClose() {
         for stop in [false, true] {
-            let fixture = makeFixture()
+            let clock = VirtualCopyCollapseClock()
+            let fixture = makeFixture(schedule: clock.schedule)
             let store = fixture.store
             let capture = makeCapture("Cancelled")
             store.captures = [capture]
             store.isExpanded = true
             XCTAssertTrue(store.copyCapture(capture.id))
+            let oldDeadline = clock.latestID
             if stop { store.stop() } else { store.collapseAfterCopy = false }
-            try await settle()
+            XCTAssertEqual(clock.activeCount, 0)
+            clock.invokeEvenIfCancelled(oldDeadline)
+            clock.advance(by: .seconds(1))
             XCTAssertTrue(store.isExpanded)
             store.stop()
         }
     }
 
     @MainActor
-    func testRapidSuccessfulCopiesRestartTheFeedbackDelay() async throws {
-        let fixture = makeFixture(delay: .milliseconds(160))
+    func testRapidSuccessfulCopiesRestartTheFeedbackDelay() {
+        let clock = VirtualCopyCollapseClock()
+        let fixture = makeFixture(delay: .milliseconds(160), schedule: clock.schedule)
         let store = fixture.store
         defer { store.stop() }
         let first = makeCapture("First")
@@ -258,13 +267,20 @@ final class CopyCollapseTests: XCTestCase {
         store.captures = [first, second]
         store.isExpanded = true
         XCTAssertTrue(store.copyCapture(first.id))
-        try await Task.sleep(for: .milliseconds(90))
+        let firstDeadline = clock.latestID
+        clock.advance(by: .milliseconds(90))
+        XCTAssertTrue(store.isExpanded)
         XCTAssertTrue(store.copyCapture(second.id))
-        try await Task.sleep(for: .milliseconds(90))
+        XCTAssertEqual(clock.activeCount, 1)
+        clock.advance(by: .milliseconds(70))
+        clock.invokeEvenIfCancelled(firstDeadline)
         XCTAssertTrue(store.isExpanded, "The first deadline must not cut off feedback for the second copy.")
         XCTAssertEqual(fixture.clipboard.string(forType: .string), second.contextText)
-        try await Task.sleep(for: .milliseconds(120))
+        clock.advance(by: .milliseconds(89))
+        XCTAssertTrue(store.isExpanded, "The second copy gets its entire feedback delay.")
+        clock.advance(by: .milliseconds(1))
         XCTAssertFalse(store.isExpanded)
+        XCTAssertEqual(clock.activeCount, 0)
         XCTAssertEqual(fixture.sound.playCount, 2)
     }
 
@@ -317,7 +333,9 @@ final class CopyCollapseTests: XCTestCase {
     }
 
     @MainActor
-    private func makeFixture(delay: Duration = .milliseconds(20)) -> (store: CaptureStore, preferences: UserDefaults, clipboard: NSPasteboard, sound: CollapseCopySoundSpy) {
+    private func makeFixture(delay: Duration = .milliseconds(20),
+                             schedule: @escaping NotchIdleTimer.Schedule = NotchIdleTimer.scheduleTask)
+        -> (store: CaptureStore, preferences: UserDefaults, clipboard: NSPasteboard, sound: CollapseCopySoundSpy) {
         let suite = "NotchShotCopyCollapseTests-\(UUID())"
         let preferences = UserDefaults(suiteName: suite)!
         let clipboard = NSPasteboard(name: .init(suite))
@@ -332,7 +350,8 @@ final class CopyCollapseTests: XCTestCase {
                                  captureSound: SilentCollapseCaptureSound(),
                                  clipboard: clipboard,
                                  copySound: sound,
-                                 copyCollapseDelay: delay)
+                                 copyCollapseDelay: delay,
+                                 copyCollapseSchedule: schedule)
         return (store, preferences, clipboard, sound)
     }
 
@@ -355,9 +374,56 @@ final class CopyCollapseTests: XCTestCase {
         return capture
     }
 
+    /// Long enough for a 20 ms collapse to have fired when one is expected not to.
     private func settle() async throws {
         try await Task.sleep(for: .milliseconds(70))
     }
+
+    /// A collapse that is expected to happen is awaited, not assumed to land
+    /// inside a fixed sleep; the assertion that follows still fails on timeout.
+    @MainActor
+    private func settle(untilCollapsed store: CaptureStore) async throws {
+        for _ in 0..<200 {
+            if !store.isExpanded { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+}
+
+/// Keep cancelled callbacks so a test can also model a deadline already queued
+/// on the main actor when a second copy or a user interaction cancels it.
+@MainActor
+private final class VirtualCopyCollapseClock {
+    private struct Job {
+        let due: Duration
+        let action: @MainActor () -> Void
+        var cancelled = false
+        var delivered = false
+    }
+    private var now = Duration.zero
+    private var jobs: [Int: Job] = [:]
+    private(set) var latestID = 0
+    var activeCount: Int { jobs.values.filter { !$0.cancelled && !$0.delivered }.count }
+
+    func schedule(_ delay: Duration, action: @escaping @MainActor () -> Void) -> (() -> Void) {
+        latestID += 1
+        let id = latestID
+        jobs[id] = Job(due: now + delay, action: action)
+        return { [weak self] in self?.jobs[id]?.cancelled = true }
+    }
+
+    func advance(by interval: Duration) {
+        let target = now + interval
+        while let next = jobs.filter({ !$0.value.cancelled && !$0.value.delivered && $0.value.due <= target })
+            .min(by: { $0.value.due == $1.value.due ? $0.key < $1.key : $0.value.due < $1.value.due }) {
+            now = next.value.due
+            jobs[next.key]?.delivered = true
+            next.value.action()
+        }
+        now = target
+    }
+
+    func invokeEvenIfCancelled(_ id: Int) { jobs[id]?.action() }
 }
 
 @MainActor

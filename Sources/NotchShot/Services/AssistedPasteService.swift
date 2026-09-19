@@ -7,6 +7,9 @@ enum AssistedPasteResult: Equatable {
     case eventsSent
     case cancelled(String)
     case unavailable(String)
+    /// Assistance could not be armed after a copy, or the sequence stopped and
+    /// the original clipboard could not be put back. Shown as an error.
+    case failed(String)
 }
 
 @MainActor
@@ -70,6 +73,7 @@ final class AssistedPasteService: AssistedPasteServing {
     private let sleep: (Duration) async throws -> Void
     private let now: () -> Date
     private let startPolling: Bool
+    private let writeClipboardItem: (NSPasteboard, NSPasteboardItem) -> Bool
     private var phase: Phase = .idle
     private var generation = UUID()
     private var clipboard: NSPasteboard?
@@ -94,7 +98,10 @@ final class AssistedPasteService: AssistedPasteServing {
         pollInterval: Duration = .milliseconds(250),
         sleep: @escaping (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         now: @escaping () -> Date = Date.init,
-        startPolling: Bool = true
+        startPolling: Bool = true,
+        writeClipboardItem: @escaping (NSPasteboard, NSPasteboardItem) -> Bool = { clipboard, item in
+            clipboard.writeObjects([item])
+        }
     ) {
         self.environment = environment ?? NativeAssistedPasteEnvironment()
         self.imageDelay = imageDelay
@@ -104,6 +111,7 @@ final class AssistedPasteService: AssistedPasteServing {
         self.sleep = sleep
         self.now = now
         self.startPolling = startPolling
+        self.writeClipboardItem = writeClipboardItem
         self.environment.onEvent = { [weak self] event in self?.handle(event) ?? false }
     }
 
@@ -177,14 +185,20 @@ final class AssistedPasteService: AssistedPasteServing {
         generation = UUID()
         guard environment.startMonitoring() else {
             finish(restoringClipboard: false)
-            onResult?(.unavailable("Paste assistance is unavailable. The rich shot is still on the clipboard."))
+            onResult?(.failed("Paste assistance is unavailable. The rich shot is still on the clipboard."))
             return false
         }
         if startPolling { beginPolling(generation: generation) }
         return true
     }
 
-    func cancel() { finish(restoringClipboard: isPasting) }
+    func cancel() {
+        // An event callback may already have ended the sequence and queued its
+        // clipboard cleanup. Repeated cancellation must leave that cleanup alive;
+        // a successfully armed new sequence invalidates it in armPrepared.
+        guard phase != .idle else { return }
+        finish(restoringClipboard: isPasting)
+    }
     func stop() { cancel() }
 
     private var ownsClipboard: Bool {
@@ -330,7 +344,7 @@ final class AssistedPasteService: AssistedPasteServing {
         }
         if didStageClipboard, !write(originalRepresentations) {
             finish(restoringClipboard: false)
-            onResult?(.cancelled("Could not restore the rich shot. Copy the shot again to retry."))
+            onResult?(.failed("Could not restore the rich shot. Copy the shot again to retry."))
             return
         }
         let token = ownedChangeCount
@@ -376,40 +390,60 @@ final class AssistedPasteService: AssistedPasteServing {
         let token = clipboard.clearContents()
         ownedChangeCount = token
         guard clipboard.changeCount == token else { return false }
-        let success = clipboard.writeObjects([item])
+        let success = writeClipboardItem(clipboard, item)
         return success && clipboard.changeCount == token
     }
 
     private func abort(_ message: String) {
-        finish(restoringClipboard: true)
-        onResult?(.cancelled(message))
+        finish(restoringClipboard: true, result: .cancelled(message))
     }
 
-    private func finish(restoringClipboard: Bool) {
+    private enum RestorationOutcome { case restored, ownershipChanged, failed }
+
+    /// A failed write is only our failure while we still own the change token.
+    /// An intervening copy belongs to its caller and must never be repaired over.
+    private func restore(
+        _ representations: [(NSPasteboard.PasteboardType, Data)],
+        to clipboard: NSPasteboard, expectedChangeCount: Int
+    ) -> RestorationOutcome {
+        guard clipboard.changeCount == expectedChangeCount else { return .ownershipChanged }
+        let item = NSPasteboardItem()
+        for (type, data) in representations {
+            guard item.setData(data, forType: type) else { return .failed }
+        }
+        // Preparing the item may materialize large formats; check ownership again
+        // immediately before clearing the pasteboard.
+        guard clipboard.changeCount == expectedChangeCount else { return .ownershipChanged }
+        let token = clipboard.clearContents()
+        guard clipboard.changeCount == token else { return .ownershipChanged }
+        let success = writeClipboardItem(clipboard, item)
+        guard clipboard.changeCount == token else { return .ownershipChanged }
+        return success ? .restored : .failed
+    }
+
+    private func reportRestoration(_ outcome: RestorationOutcome, result: AssistedPasteResult?) {
+        if outcome == .failed {
+            onResult?(.failed("Could not restore the rich shot. Copy the shot again to retry."))
+        } else if let result {
+            onResult?(result)
+        }
+    }
+
+    private func finish(restoringClipboard: Bool, result: AssistedPasteResult? = nil) {
+        // Snapshot restoration before invalidating this sequence. A deferred
+        // cleanup must not use the next capture's representations or ownership.
+        let restoreClipboard = restoringClipboard && didStageClipboard
+            && !originalRepresentations.isEmpty && ownsClipboard
+        let clipboardToRestore = clipboard
+        let expectedChangeCount = ownedChangeCount
+        let representations = originalRepresentations
         generation = UUID()
+        let completionGeneration = generation
         sequenceTask?.cancel()
         pollingTask?.cancel()
         sequenceTask = nil
         pollingTask = nil
         environment.stopMonitoring()
-        if restoringClipboard, didStageClipboard, !originalRepresentations.isEmpty, ownsClipboard {
-            if isHandlingEvent, let clipboard, let ownedChangeCount {
-                // Cancellation invalidates the sequence immediately, but copying
-                // potentially large rich formats must wait until the tap returns.
-                let representations = originalRepresentations
-                Task { @MainActor in
-                    await Task.yield()
-                    guard clipboard.changeCount == ownedChangeCount else { return }
-                    let item = NSPasteboardItem()
-                    for (type, data) in representations { item.setData(data, forType: type) }
-                    let token = clipboard.clearContents()
-                    guard clipboard.changeCount == token else { return }
-                    _ = clipboard.writeObjects([item])
-                }
-            } else {
-                _ = write(originalRepresentations)
-            }
-        }
         phase = .idle
         clipboard = nil
         ownedChangeCount = nil
@@ -420,7 +454,31 @@ final class AssistedPasteService: AssistedPasteServing {
         context = ""
         target = nil
         preparingPID = nil
+
+        guard restoreClipboard, let clipboardToRestore, let expectedChangeCount else {
+            if let result { onResult?(result) }
+            return
+        }
+        if isHandlingEvent {
+            // Cancellation invalidates the sequence immediately, but copying
+            // potentially large rich formats must wait until the tap returns.
+            // Report the final outcome once, after the attempted restoration.
+            Task { @MainActor [weak self] in
+                await Task.yield()
+                guard let self, self.generation == completionGeneration else { return }
+                let outcome = self.restore(representations, to: clipboardToRestore,
+                                           expectedChangeCount: expectedChangeCount)
+                guard self.generation == completionGeneration else { return }
+                self.reportRestoration(outcome, result: result)
+            }
+        } else {
+            let outcome = restore(representations, to: clipboardToRestore,
+                                  expectedChangeCount: expectedChangeCount)
+            guard generation == completionGeneration else { return }
+            reportRestoration(outcome, result: result)
+        }
     }
+
 }
 
 /// Main-run-loop event tap, installed only for one pending assisted paste.

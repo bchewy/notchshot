@@ -1,0 +1,53 @@
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift-test:
+    name: Build and test (macOS)
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcode-select -p
+          swift --version
+
+      - name: Build
+        run: swift build --disable-sandbox
+
+      - name: Test
+        shell: bash
+        run: swift test --disable-sandbox 2>&1 | tee test-output.log
+
+      - name: Test summary
+        if: always()
+        shell: bash
+        run: |
+          executed=$(grep -Eo "Executed [0-9]+ tests" test-output.log | tail -1 | grep -Eo "[0-9]+" || true)
+          echo "Executed ${executed:-0} tests"
+          grep -E "' skipped \(" test-output.log || true
+          if [ "${executed:-0}" -lt 290 ]; then
+            echo "::error::Expected at least 290 tests to run; saw ${executed:-0}."
+            exit 1
+          fi
+
+      - name: Upload test log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: swift-test-log
+          path: test-output.log
+          retention-days: 14
