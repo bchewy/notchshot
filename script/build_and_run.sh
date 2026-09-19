@@ -3,12 +3,18 @@
 set -euo pipefail
 
 MODE="${1:-run}"
-case "$MODE" in run|--build-only|--verify|--debug|--logs|--telemetry) ;; *) echo "Usage: $0 [--build-only|--verify|--debug|--logs|--telemetry]" >&2; exit 2 ;; esac
+case "$MODE" in run|--build-only|--stage-only|--verify|--debug|--logs|--telemetry) ;; *) echo "Usage: $0 [--build-only|--stage-only|--verify|--debug|--logs|--telemetry]" >&2; exit 2 ;; esac
 APP_NAME="NotchShot"
 BUNDLE_ID="com.bchewy.NotchShot"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_BUNDLE="$PROJECT_ROOT/outputs/$APP_NAME.app"
 STAGED_APP="$PROJECT_ROOT/work/staged/$APP_NAME.app"
+BUILD_CONFIGURATION=debug
+BUILD_CHANNEL=Local
+if [[ "$MODE" == --stage-only ]]; then
+  BUILD_CONFIGURATION=release
+  BUILD_CHANNEL=Preview
+fi
 cd "$PROJECT_ROOT"
 
 mkdir -p "$PROJECT_ROOT/work"
@@ -80,19 +86,33 @@ if [[ -z "$SIGNING_IDENTITY" ]]; then
   fi
 fi
 
+if [[ "$MODE" == --stage-only && "$SIGNING_IDENTITY" == - ]]; then
+  echo "Preview packaging requires the existing certificate signing identity. No app has been replaced." >&2
+  exit 1
+fi
+
 mkdir -p "$PROJECT_ROOT/work/clang-cache" "$PROJECT_ROOT/work/swift-cache"
 export CLANG_MODULE_CACHE_PATH="$PROJECT_ROOT/work/clang-cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$PROJECT_ROOT/work/swift-cache"
-swift build --disable-sandbox
-BUILD_BINARY="$(swift build --disable-sandbox --show-bin-path)/$APP_NAME"
+# Record the checkout used for this local build without embedding its disk path.
+SOURCE_REVISION="$(git rev-parse --verify HEAD 2>/dev/null || true)"
+SOURCE_DIRTY=true
+if [[ -n "$SOURCE_REVISION" ]]; then
+  if SOURCE_STATUS="$(git status --porcelain --untracked-files=normal)" && [[ -z "$SOURCE_STATUS" ]]; then SOURCE_DIRTY=false; fi
+else
+  SOURCE_REVISION="unknown"
+fi
+if [[ "$MODE" == --stage-only && "$SOURCE_DIRTY" == true ]]; then
+  echo "Commit the source changes before staging a preview so its source revision is exact." >&2
+  exit 1
+fi
+swift build --configuration "$BUILD_CONFIGURATION" --disable-sandbox
+BUILD_BINARY="$(swift build --configuration "$BUILD_CONFIGURATION" --disable-sandbox --show-bin-path)/$APP_NAME"
 # Only scratch staging is cleared. The stable app and its running process stay
 # untouched until the entire replacement has been built, signed, and verified.
 mkdir -p "$PROJECT_ROOT/work/staged"
 rm -rf "$STAGED_APP"
 mkdir -p "$STAGED_APP/Contents/MacOS" "$STAGED_APP/Contents/Resources"
-if [[ -d "$APP_BUNDLE/Contents/Resources" ]]; then
-  /usr/bin/ditto "$APP_BUNDLE/Contents/Resources" "$STAGED_APP/Contents/Resources"
-fi
 cp "$BUILD_BINARY" "$STAGED_APP/Contents/MacOS/$APP_NAME"
 cp "$PROJECT_ROOT/LICENSE" "$STAGED_APP/Contents/Resources/LICENSE"
 cp "$PROJECT_ROOT/LICENSE-MIT" "$STAGED_APP/Contents/Resources/LICENSE-MIT"
@@ -100,7 +120,9 @@ cp "$PROJECT_ROOT/LICENSING.md" "$STAGED_APP/Contents/Resources/LICENSING.md"
 cp "$PROJECT_ROOT/THIRD_PARTY_NOTICES.md" "$STAGED_APP/Contents/Resources/THIRD_PARTY_NOTICES.md"
 cp "$PROJECT_ROOT"/Sources/NotchShot/Resources/*.wav "$STAGED_APP/Contents/Resources/"
 cp "$PROJECT_ROOT"/Sources/NotchShot/Resources/Camera*.png "$STAGED_APP/Contents/Resources/"
-if [[ -f "$PROJECT_ROOT/work/AppIcon.icns" ]]; then cp "$PROJECT_ROOT/work/AppIcon.icns" "$STAGED_APP/Contents/Resources/AppIcon.icns"; fi
+if [[ "$MODE" != --stage-only && -f "$PROJECT_ROOT/work/AppIcon.icns" ]]; then
+  cp "$PROJECT_ROOT/work/AppIcon.icns" "$STAGED_APP/Contents/Resources/AppIcon.icns"
+fi
 cat > "$STAGED_APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -110,9 +132,8 @@ cat > "$STAGED_APP/Contents/Info.plist" <<PLIST
 <key>CFBundleName</key><string>$APP_NAME</string>
 <key>CFBundleDisplayName</key><string>$APP_NAME</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.5.2</string>
-<key>CFBundleVersion</key><string>28</string>
-<key>CFBundleIconFile</key><string>AppIcon</string>
+<key>CFBundleShortVersionString</key><string>0.6.0</string>
+<key>CFBundleVersion</key><string>29</string>
 <key>LSMinimumSystemVersion</key><string>15.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
@@ -120,6 +141,13 @@ cat > "$STAGED_APP/Contents/Info.plist" <<PLIST
 <key>NSScreenCaptureUsageDescription</key><string>Capture the active app window when you press the shortcut or click Capture.</string>
 </dict></plist>
 PLIST
+# plutil handles string escaping; these fields are part of the signed bundle.
+/usr/bin/plutil -insert NotchShotBuildChannel -string "$BUILD_CHANNEL" "$STAGED_APP/Contents/Info.plist"
+/usr/bin/plutil -insert NotchShotSourceRevision -string "$SOURCE_REVISION" "$STAGED_APP/Contents/Info.plist"
+/usr/bin/plutil -insert NotchShotSourceDirty -bool "$SOURCE_DIRTY" "$STAGED_APP/Contents/Info.plist"
+if [[ -f "$STAGED_APP/Contents/Resources/AppIcon.icns" ]]; then
+  /usr/bin/plutil -insert CFBundleIconFile -string AppIcon "$STAGED_APP/Contents/Info.plist"
+fi
 
 # Reuse a development identity when available so macOS sees updates as the same
 # app. The cached value is a public certificate fingerprint, never a private key.
@@ -158,6 +186,11 @@ if [[ "$SIGNING_IDENTITY" != "-" ]]; then
     echo "A positive OCSP status is required. Check the reported certificate error or network availability before retrying. Public certificates are saved at $CERTIFICATE_DIR." >&2
     exit 1
   fi
+fi
+
+if [[ "$MODE" == --stage-only ]]; then
+  echo "Verified $BUILD_CHANNEL $STAGED_APP ($SOURCE_REVISION); the installed app is unchanged."
+  exit 0
 fi
 
 # Copy onto the destination filesystem before stopping the app, so installation
