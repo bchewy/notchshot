@@ -70,7 +70,7 @@ final class CaptureQOLTests: XCTestCase {
 
         XCTAssertTrue(store.copyCapture(hovered.id))
 
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), hovered.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), hovered.clipboardText)
         XCTAssertEqual(fixture.clipboard.data(forType: .png), hovered.pngData)
         let tiff = try XCTUnwrap(fixture.clipboard.data(forType: .tiff))
         XCTAssertNotNil(NSImage(data: tiff))
@@ -83,7 +83,7 @@ final class CaptureQOLTests: XCTestCase {
         let status = store.statusNotice?.message
         XCTAssertFalse(store.copyCapture(UUID()))
         XCTAssertEqual(fixture.clipboard.changeCount, changeCount, "A stale hover must leave the user's clipboard intact.")
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), hovered.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), hovered.clipboardText)
         XCTAssertEqual(store.statusNotice?.message, status)
     }
 
@@ -111,11 +111,12 @@ final class CaptureQOLTests: XCTestCase {
         store.isCapturing = false
         store.autoCopyCompletedCapture(completed)
         let copiedText = try XCTUnwrap(fixture.clipboard.string(forType: .string))
-        XCTAssertEqual(copiedText, completed.contextText)
-        XCTAssertTrue(copiedText.contains("## Accessibility text\nAccessible content for Complete capture"))
-        XCTAssertTrue(copiedText.contains("## Accessibility tree"))
+        XCTAssertEqual(copiedText, completed.clipboardText)
+        XCTAssertEqual(copiedText, completed.treeText)
+        XCTAssertFalse(copiedText.contains("## Accessibility text"))
+        XCTAssertFalse(copiedText.contains(completed.accessibilityText))
         XCTAssertTrue(copiedText.contains("button Submit Complete capture"))
-        XCTAssertTrue(copiedText.contains("## Text recognized from screenshot (OCR)"))
+        XCTAssertFalse(copiedText.contains("## Text recognized from screenshot (OCR)"))
         XCTAssertEqual(fixture.clipboard.data(forType: .png), completed.pngData)
         XCTAssertNotNil(fixture.clipboard.data(forType: .tiff))
 
@@ -141,7 +142,7 @@ final class CaptureQOLTests: XCTestCase {
 
         store.acceptPendingCapture()
 
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), completed.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), completed.clipboardText)
         XCTAssertEqual(store.captures.map(\.id), [completed.id])
     }
 

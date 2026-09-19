@@ -169,13 +169,97 @@ final class CaptureCardMotionTests: XCTestCase {
     }
 
     @MainActor
-    private func makeHiddenCard(reduceMotion: @escaping () -> Bool = { false }) throws -> (CaptureStore, CaptureCardController, NSWindow) {
+    func testCompactLandingReadsInjectedDestinationAtFlightTimeWithoutOpeningShelf() async throws {
+        var compactFrame: CGRect?
+        var destinationReads = 0
+        let (store, controller, window) = try makeHiddenCard(compactLandingFrame: {
+            destinationReads += 1
+            return compactFrame
+        })
+        defer { controller.dismiss(); window.close(); store.stop() }
+        store.openShelfAfterCapture = false
+        store.page = .settings
+        let capture = makeCapture()
+        store.pendingCapture = capture
+        store.onDismissCard = { [weak controller] in controller?.dismiss() }
+        controller.present(capture)
+        try await waitForMotion { !controller.isAnimating }
+        XCTAssertEqual(destinationReads, 0)
+
+        let screen = try XCTUnwrap(NotchGeometry.preferredScreen)
+        let destination = CGRect(x: screen.frame.minX + 120, y: screen.frame.maxY - 40, width: 28, height: 18)
+        compactFrame = destination
+        var completions = 0
+        store.onLandCard = { [weak controller] finish in
+            controller?.landInShelf {
+                completions += 1
+                finish()
+            }
+        }
+        store.endCardDrag(accepted: false)
+        try await waitForMotion { completions == 1 && !controller.isAnimating }
+
+        XCTAssertEqual(destinationReads, 1, "Use the followed notch's current anchor when flight starts.")
+        XCTAssertEqual(window.frame.minX, destination.minX, accuracy: 0.5)
+        XCTAssertEqual(window.frame.minY, destination.minY, accuracy: 0.5)
+        XCTAssertEqual(window.frame.size, destination.size)
+        XCTAssertEqual(completions, 1)
+        XCTAssertEqual(store.captures.map(\.id), [capture.id])
+        XCTAssertNil(store.pendingCapture)
+        XCTAssertFalse(store.isExpanded)
+        XCTAssertEqual(store.page, .settings)
+        XCTAssertFalse(window.isVisible, "Native regression tests must never present UI.")
+    }
+
+    @MainActor
+    func testCompactLandingAndHandoffCompleteWhenDestinationIsOutsideEveryDisplay() async throws {
+        var compactFrame: CGRect?
+        let (store, controller, window) = try makeHiddenCard(compactLandingFrame: { compactFrame })
+        defer { controller.dismiss(); window.close(); store.stop() }
+        store.openShelfAfterCapture = false
+        let capture = makeCapture()
+        store.pendingCapture = capture
+        store.onDismissCard = { [weak controller] in controller?.dismiss() }
+        controller.present(capture)
+        try await waitForMotion { !controller.isAnimating }
+
+        let desktop = NSScreen.screens.reduce(CGRect.null) { $0.union($1.frame) }
+        let destination = CGRect(x: desktop.maxX + 1000, y: desktop.maxY + 1000, width: 28, height: 18)
+        XCTAssertFalse(NSScreen.screens.contains { $0.frame.intersects(destination) })
+        compactFrame = destination
+        var completions = 0
+        var landedOutsideEveryDisplay = false
+        store.onLandCard = { [weak controller] finish in
+            controller?.landInShelf {
+                completions += 1
+                landedOutsideEveryDisplay = !NSScreen.screens.contains { $0.frame.intersects(window.frame) }
+                finish()
+            }
+        }
+        store.endCardDrag(accepted: false)
+        try await waitForMotion { completions == 1 && !controller.isAnimating }
+
+        XCTAssertTrue(landedOutsideEveryDisplay, "The flight must progress beyond every physical display.")
+        XCTAssertEqual(completions, 1)
+        XCTAssertEqual(window.frame.minX, destination.minX, accuracy: 0.5)
+        XCTAssertEqual(window.frame.minY, destination.minY, accuracy: 0.5)
+        XCTAssertEqual(window.frame.size, destination.size)
+        XCTAssertEqual(store.captures.map(\.id), [capture.id])
+        XCTAssertNil(store.pendingCapture)
+        XCTAssertFalse(store.isExpanded)
+        XCTAssertFalse(window.isVisible, "An off-display handoff must finish without showing the test window.")
+    }
+
+    @MainActor
+    private func makeHiddenCard(reduceMotion: @escaping () -> Bool = { false },
+                                compactLandingFrame: @escaping () -> CGRect? = { nil }) throws -> (CaptureStore, CaptureCardController, NSWindow) {
         _ = NSApplication.shared
         guard NotchGeometry.preferredScreen != nil else { throw XCTSkip("Requires WindowServer display access.") }
         let previousWindows = Set(NSApp.windows.map(ObjectIdentifier.init))
         let (preferences, clipboard) = isolatedStoreDependencies()
         let store = CaptureStore(preferences: preferences, clipboard: clipboard)
-        let controller = CaptureCardController(store: store, presentsWindow: false, reduceMotion: reduceMotion)
+        let controller = CaptureCardController(store: store, presentsWindow: false, reduceMotion: reduceMotion,
+                                               compactLandingFrame: compactLandingFrame)
         let window = try XCTUnwrap(NSApp.windows.first {
             !previousWindows.contains(ObjectIdentifier($0)) && $0.title == "NotchShot capture preview"
         })

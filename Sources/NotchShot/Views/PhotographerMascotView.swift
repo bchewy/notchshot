@@ -4,13 +4,14 @@ import SwiftUI
 /// Crisp native geometry for the tiny face, with the user's selected camera.
 /// The drawing uses a 100 × 120 canvas and stays inside the existing strip lane.
 struct PhotographerMascotView: View {
+    @Environment(\.notchTheme) private var theme
     let pose: PhotographerPose
     let camera: CaptureShutterSound
     var expansion: CGFloat = 0
     var isHovered = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    private let ink = Color(red: 0.055, green: 0.20, blue: 0.16)
+    private let ink = Color.black.opacity(0.78)
     private var progress: CGFloat { min(max(expansion, 0), 1) }
     private var width: CGFloat { 14 + 12 * progress }
     private var cameraLift: CGFloat { pose == .framing ? -22 : 0 }
@@ -35,7 +36,7 @@ struct PhotographerMascotView: View {
     private var photographer: some View {
         ZStack {
             MintPhotographerBody()
-                .fill(LinearGradient(colors: [Color(red: 0.70, green: 0.98, blue: 0.85), NotchStyle.accent],
+                .fill(LinearGradient(colors: [theme.mascotHighlight, theme.accent],
                                      startPoint: .topLeading, endPoint: .bottomTrailing))
                 .overlay(MintPhotographerBody().stroke(Color.white.opacity(0.18), lineWidth: 1.2))
 
@@ -64,7 +65,7 @@ struct PhotographerMascotView: View {
             // Paws stay above the camera edges as it rises toward the face.
             ForEach([16.0, 84.0], id: \.self) { x in
                 Capsule()
-                    .fill(NotchStyle.accent)
+                    .fill(theme.accent)
                     .overlay(Capsule().stroke(ink.opacity(0.18), lineWidth: 1))
                     .frame(width: 12, height: 19)
                     .rotationEffect(.degrees(x < 50 ? -14 : 14))
@@ -105,7 +106,7 @@ struct PhotographerMascotView: View {
             .fill(Color(red: 0.96, green: 0.99, blue: 0.96))
             .overlay(alignment: .top) {
                 RoundedRectangle(cornerRadius: 1)
-                    .fill(Color(red: 0.19, green: 0.52, blue: 0.44))
+                    .fill(theme.accent.opacity(0.8))
                     .frame(width: 20, height: 16)
                     .padding(.top, 3)
             }

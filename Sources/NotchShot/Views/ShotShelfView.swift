@@ -3,11 +3,17 @@ import AppKit
 import SwiftUI
 
 struct ShotShelfView: View {
+    @Environment(\.notchTheme) private var theme
     static let height: CGFloat = 64
 
     @Bindable var store: CaptureStore
     @State private var hoveredID: UUID?
-    @State private var hoverPreview = ShotHoverPreviewController()
+    @State private var hoverPreview: ShotHoverPreviewController
+
+    init(store: CaptureStore) {
+        self.store = store
+        _hoverPreview = State(initialValue: ShotHoverPreviewController(store: store))
+    }
 
     private var canPreview: Bool {
         store.isExpanded && store.page == .shelf && !store.isCapturing &&
@@ -41,7 +47,7 @@ struct ShotShelfView: View {
                 }
             }
             .font(.system(size: 8, weight: .semibold, design: .monospaced))
-            .foregroundStyle(store.isDropTargeted ? NotchStyle.accent : Color.white.opacity(0.45))
+            .foregroundStyle(store.isDropTargeted ? theme.accent : Color.white.opacity(0.45))
             .frame(height: 10)
 
             Group {
@@ -56,11 +62,11 @@ struct ShotShelfView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .frame(height: Self.height)
-        .background(store.isDropTargeted ? NotchStyle.accent.opacity(0.08) : NotchStyle.subtle, in: RoundedRectangle(cornerRadius: 11))
+        .background(store.isDropTargeted ? theme.accent.opacity(0.08) : NotchStyle.subtle, in: RoundedRectangle(cornerRadius: 11))
         .overlay {
             RoundedRectangle(cornerRadius: 11)
                 .strokeBorder(
-                    store.isDropTargeted ? NotchStyle.accent.opacity(0.9) : NotchStyle.border,
+                    store.isDropTargeted ? theme.accent.opacity(0.9) : NotchStyle.border,
                     style: StrokeStyle(lineWidth: 1, dash: store.isDropTargeted ? [4, 4] : [])
                 )
         }
@@ -84,7 +90,7 @@ struct ShotShelfView: View {
             action()
         } label: {
             Text(title)
-                .foregroundStyle(NotchStyle.accent)
+                .foregroundStyle(theme.accent)
                 .padding(.horizontal, 3)
                 .contentShape(Rectangle())
         }
@@ -102,11 +108,11 @@ struct ShotShelfView: View {
         HStack(spacing: 10) {
             Image(systemName: store.isDropTargeted ? "arrow.down.to.line" : "rectangle.on.rectangle")
                 .font(.system(size: 16, weight: .light))
-                .foregroundStyle(store.isDropTargeted ? NotchStyle.accent : Color.white.opacity(0.35))
+                .foregroundStyle(store.isDropTargeted ? theme.accent : Color.white.opacity(0.35))
             VStack(alignment: .leading, spacing: 2) {
                 Text(store.isDropTargeted ? "Release to add to your shelf" : "Drop Appshots here")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(store.isDropTargeted ? NotchStyle.accent : Color.white.opacity(0.75))
+                    .foregroundStyle(store.isDropTargeted ? theme.accent : Color.white.opacity(0.75))
                     .lineLimit(1)
                 Text("Screenshot + context, together")
                     .font(.system(size: 10))
@@ -203,6 +209,7 @@ struct ShotShelfView: View {
 }
 
 private struct ShotShelfThumbnail: View {
+    @Environment(\.notchTheme) private var theme
     let capture: CaptureResult
     let isSelected: Bool
     let selectionNumber: Int?
@@ -240,12 +247,12 @@ private struct ShotShelfThumbnail: View {
         .opacity(isIncoming ? 0.16 : 1)
         .overlay {
             RoundedRectangle(cornerRadius: 6)
-                .fill(NotchStyle.accent.opacity(isHovered ? 0.10 : 0))
+                .fill(theme.accent.opacity(isHovered ? 0.10 : 0))
                 .allowsHitTesting(false)
         }
         .overlay {
             RoundedRectangle(cornerRadius: 6)
-                .strokeBorder(isIncoming ? NotchStyle.accent.opacity(0.45) : ((isSelected || isHovered) ? NotchStyle.accent : Color.white.opacity(0.13)),
+                .strokeBorder(isIncoming ? theme.accent.opacity(0.45) : ((isSelected || isHovered) ? theme.accent : Color.white.opacity(0.13)),
                               style: StrokeStyle(lineWidth: (isSelected || isHovered) && !isIncoming ? 1.5 : 1, dash: isIncoming ? [3, 3] : []))
         }
         .overlay(alignment: .topLeading) {
@@ -254,7 +261,7 @@ private struct ShotShelfThumbnail: View {
                     .font(.system(size: 8, weight: .bold, design: .rounded))
                     .foregroundStyle(.black)
                     .frame(width: 14, height: 14)
-                    .background(NotchStyle.accent, in: Circle())
+                    .background(theme.accent, in: Circle())
                     .padding(2)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
@@ -264,7 +271,7 @@ private struct ShotShelfThumbnail: View {
             if isIncoming {
                 Image(systemName: "arrow.down.to.line")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(NotchStyle.accent.opacity(0.65))
+                    .foregroundStyle(theme.accent.opacity(0.65))
                     .background(ShelfLandingTargetView(store: store, captureID: capture.id)
                         .frame(width: 70, height: 36))
             }

@@ -25,6 +25,11 @@ final class BatchClipboardTests: XCTestCase {
         let prefix = document.string.dropLast(batch.contextText.count)
         XCTAssertEqual(prefix.filter { !$0.isWhitespace }, "\u{FFFC}\u{FFFC}\u{FFFC}")
         XCTAssertEqual(clipboard.pasteboardItems?.count, 1)
+        for capture in captures {
+            XCTAssertTrue(document.string.contains(capture.treeText))
+            XCTAssertFalse(document.string.contains(capture.accessibilityText))
+            XCTAssertFalse(document.string.contains(capture.ocrText))
+        }
     }
 
     @MainActor
@@ -88,6 +93,7 @@ final class BatchClipboardTests: XCTestCase {
     func testLongUnicodeContextPastesExactlyIntoPlainTextReceiver() throws {
         var first = try makeCapture(name: "Long first")
         first.accessibilityText = String(repeating: "Long captured context — 你好 👨‍👩‍👧‍👦 📷\n", count: 4_000)
+        first.axTree = [AXNode(id: 1, role: "AXStaticText", roleDescription: "text", value: first.accessibilityText)]
         let second = try makeCapture(name: "Last shot remains present")
         for style in [BatchContextStyle.compact, .full] {
             let batch = CaptureBatch(captures: [first, second], contextStyle: style)
@@ -290,6 +296,8 @@ final class BatchClipboardTests: XCTestCase {
         return CaptureResult(date: Date(timeIntervalSince1970: 1_700_000_000), appName: name,
                              bundleIdentifier: "com.example.clipboard-batch", windowTitle: "Window \(name)",
                              pngData: try XCTUnwrap(bitmap.representation(using: .png, properties: [:])),
+                             axTree: [AXNode(id: 1, role: "AXWindow", roleDescription: "window", title: name,
+                                            children: [AXNode(id: 2, role: "AXButton", roleDescription: "button", title: "Action for \(name) with 'quoted' content")])],
                              accessibilityText: "Text for \(name) with 'quoted' content & more — 你好 📷",
                              ocrText: "Separate OCR \(name)", warnings: ["Capture note \(name)"])
     }

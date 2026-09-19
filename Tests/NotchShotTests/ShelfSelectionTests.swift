@@ -26,7 +26,7 @@ final class ShelfSelectionTests: XCTestCase {
     }
 
     @MainActor
-    func testSelectionDoesNotNavigateOrOverwriteDetailSelectionAndCopiesInShelfOrder() {
+    func testSelectionDoesNotNavigateOrOverwriteDetailSelectionAndCopiesInShelfOrder() async throws {
         let f = fixture()
         defer { f.store.stop() }
         let shots = [shot("First"), shot("Second"), shot("Third")]
@@ -40,25 +40,28 @@ final class ShelfSelectionTests: XCTestCase {
         XCTAssertEqual(f.store.selectedID, shots[1].id)
         XCTAssertEqual(f.store.selectedShelfCaptures.map(\.id), [shots[0].id, shots[2].id])
         f.store.batchContextStyle = .full
-        let expected = f.store.selectedBatch!.contextText
+        let batch = try await waitForPreparedBatch(f.store)
+        let expected = batch.contextText
         XCTAssertTrue(f.store.copyShelfSelection())
         XCTAssertEqual(f.board.string(forType: .string), expected)
-        XCTAssertTrue(expected.contains(shots[0].contextText))
-        XCTAssertTrue(expected.contains(shots[2].contextText))
-        XCTAssertFalse(expected.contains(shots[1].contextText))
+        XCTAssertTrue(expected.contains(shots[0].clipboardText))
+        XCTAssertTrue(expected.contains(shots[2].clipboardText))
+        XCTAssertFalse(expected.contains(shots[1].clipboardText))
         XCTAssertEqual(f.sound.plays, 1, "One copy confirms the whole batch once.")
     }
 
     @MainActor
-    func testHoverDuringSelectionCopiesBatchEvenOverUnselectedThumbnailAndEmptySelectionDoesNotCopy() {
+    func testHoverDuringSelectionCopiesBatchEvenOverUnselectedThumbnailAndEmptySelectionDoesNotCopy() async throws {
         let f = fixture()
         defer { f.store.stop() }
         let shots = [shot("Selected"), shot("Hovered")]
         f.store.captures = shots
         f.store.handleShelfClick(shots[0].id, commandPressed: true)
+        let batch = try await waitForPreparedBatch(f.store)
         XCTAssertTrue(f.store.copyShelfShot(shots[1].id))
-        XCTAssertEqual(f.board.string(forType: .string), f.store.selectedBatch?.contextText)
-        XCTAssertFalse(f.board.string(forType: .string)!.contains("Content for Hovered"))
+        let copied = try XCTUnwrap(f.board.string(forType: .string))
+        XCTAssertEqual(copied, batch.contextText)
+        XCTAssertFalse(copied.contains("Content for Hovered"))
         f.store.handleShelfClick(shots[0].id)
         let token = f.board.changeCount
         XCTAssertFalse(f.store.copyShelfSelection())
@@ -67,11 +70,11 @@ final class ShelfSelectionTests: XCTestCase {
         XCTAssertEqual(f.board.changeCount, token)
         f.store.endShelfSelection()
         XCTAssertTrue(f.store.copyShelfShot(shots[1].id))
-        XCTAssertEqual(f.board.string(forType: .string), shots[1].contextText)
+        XCTAssertEqual(f.board.string(forType: .string), shots[1].clipboardText)
     }
 
     @MainActor
-    func testRemovalAndClearingCannotCopyStaleSelectedShots() {
+    func testRemovalAndClearingCannotCopyStaleSelectedShots() async throws {
         let f = fixture()
         defer { f.store.stop() }
         let shots = [shot("Retained"), shot("Removed")]
@@ -79,9 +82,11 @@ final class ShelfSelectionTests: XCTestCase {
         f.store.selectAllShelfShots()
         f.store.removeCapture(shots[1].id)
         XCTAssertEqual(f.store.selectedShotCount, 1)
-        XCTAssertEqual(f.store.selectedBatch?.captures.map(\.id), [shots[0].id])
+        let batch = try await waitForPreparedBatch(f.store)
+        XCTAssertEqual(batch.captures.map(\.id), [shots[0].id])
         XCTAssertTrue(f.store.copyShelfSelection())
-        XCTAssertFalse(f.board.string(forType: .string)!.contains("Content for Removed"))
+        let copied = try XCTUnwrap(f.board.string(forType: .string))
+        XCTAssertFalse(copied.contains("Content for Removed"))
         f.store.clearHistory()
         XCTAssertFalse(f.store.isSelectingShots)
         XCTAssertNil(f.store.selectedBatch)
@@ -89,18 +94,22 @@ final class ShelfSelectionTests: XCTestCase {
     }
 
     @MainActor
-    func testModePreferencePersistsAndRebuildsContextWithoutMutatingOriginals() {
+    func testModePreferencePersistsAndRebuildsContextWithoutMutatingOriginals() async throws {
         let f = fixture()
         defer { f.store.stop() }
         var large = shot("Long")
         large.accessibilityText = String(repeating: "A long unique paragraph with useful context.\n", count: 2_000)
+        large.axTree = [AXNode(id: 1, role: "AXStaticText", roleDescription: "text", value: large.accessibilityText)]
         f.store.captures = [large]
         f.store.selectAllShelfShots()
         XCTAssertEqual(f.store.batchContextStyle, .compact)
-        XCTAssertTrue(f.store.selectedBatch!.isShortened)
+        let compact = try await waitForPreparedBatch(f.store)
+        XCTAssertTrue(compact.isShortened)
         f.store.batchContextStyle = .full
-        XCTAssertTrue(f.store.selectedBatch!.contextText.contains(large.contextText))
+        let full = try await waitForPreparedBatch(f.store)
+        XCTAssertTrue(full.contextText.contains(large.clipboardText))
         XCTAssertEqual(f.store.captures[0].accessibilityText, large.accessibilityText)
+        XCTAssertEqual(f.store.captures[0].axTree.first?.value, large.axTree.first?.value)
         let restored = CaptureStore(preferences: f.preferences,
                                     captureSound: SilentBatchSelectionCaptureSound(), clipboard: f.board,
                                     copySound: BatchSelectionSound(), assistedPaste: BatchSelectionPasteSpy())
@@ -136,6 +145,7 @@ final class ShelfSelectionTests: XCTestCase {
         let shot = shot("Review")
         f.store.captures = [shot]
         f.store.selectAllShelfShots()
+        let batch = try await waitForPreparedBatch(f.store)
         f.store.isExpanded = true
         f.store.collapseAfterCopy = true
         let owner = UUID()
@@ -145,11 +155,11 @@ final class ShelfSelectionTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(350))
         XCTAssertFalse(f.store.isExpanded)
         XCTAssertEqual(f.store.selectedShotIDs, [shot.id])
-        XCTAssertEqual(f.board.string(forType: .string), f.store.selectedBatch?.contextText)
+        XCTAssertEqual(f.board.string(forType: .string), batch.contextText)
     }
 
     @MainActor
-    func testKeyboardCommandsAreScopedToTheKeyShelfAndRespectTextEditing() {
+    func testKeyboardCommandsAreScopedToTheKeyShelfAndRespectTextEditing() async throws {
         _ = NSApplication.shared
         let f = fixture()
         defer { f.store.stop() }
@@ -172,7 +182,9 @@ final class ShelfSelectionTests: XCTestCase {
         f.store.beginShelfSelection()
         XCTAssertTrue(view.handle(event(0)))
         XCTAssertEqual(f.store.selectedShotCount, 2)
+        let batch = try await waitForPreparedBatch(f.store)
         XCTAssertTrue(view.handle(event(8)))
+        XCTAssertEqual(f.board.string(forType: .string), batch.contextText)
         let token = f.board.changeCount
         XCTAssertFalse(view.handle(event(8, flags: [.command, .shift])))
         panel.simulatesKey = false
@@ -193,6 +205,7 @@ final class ShelfSelectionTests: XCTestCase {
         defer { f.store.stop() }
         var large = shot("Large")
         large.accessibilityText = String(repeating: "Lengthy captured source with Unicode 你好 👩🏽‍💻.\n", count: 20_000)
+        large.axTree = [AXNode(id: 1, role: "AXStaticText", roleDescription: "text", value: large.accessibilityText)]
         let small = shot("Current selection")
         f.store.captures = [large, small]
         f.store.handleShelfClick(large.id, commandPressed: true)
@@ -200,13 +213,16 @@ final class ShelfSelectionTests: XCTestCase {
         let token = f.board.changeCount
         XCTAssertFalse(f.store.copyShelfSelection())
         XCTAssertEqual(f.board.changeCount, token)
+        await Task.yield()
         f.store.handleShelfClick(large.id)
         f.store.handleShelfClick(small.id)
-        XCTAssertFalse(f.store.isPreparingBatch)
-        try await Task.sleep(for: .milliseconds(100))
-        XCTAssertEqual(f.store.selectedBatch?.captures.map(\.id), [small.id])
+        XCTAssertTrue(f.store.isPreparingBatch)
+        let batch = try await waitForPreparedBatch(f.store)
+        XCTAssertEqual(batch.captures.map(\.id), [small.id])
         XCTAssertTrue(f.store.copyShelfSelection())
-        XCTAssertFalse(f.board.string(forType: .string)!.contains("App: Large"))
+        let copied = try XCTUnwrap(f.board.string(forType: .string))
+        XCTAssertEqual(copied, batch.contextText)
+        XCTAssertFalse(copied.contains("App: Large"))
     }
 
     @MainActor
@@ -218,11 +234,7 @@ final class ShelfSelectionTests: XCTestCase {
         f.store.captures = [capture]
         f.store.selectAllShelfShots()
         XCTAssertTrue(f.store.isPreparingBatch)
-        for _ in 0..<100 {
-            if !f.store.isPreparingBatch { break }
-            try await Task.sleep(for: .milliseconds(10))
-        }
-        let batch = try XCTUnwrap(f.store.selectedBatch)
+        let batch = try await waitForPreparedBatch(f.store)
         XCTAssertTrue(batch.imagePNGs.isEmpty)
         XCTAssertEqual(batch.omittedScreenshotNumbers, [1])
         XCTAssertTrue(batch.contextText.contains("unavailable"))
@@ -230,6 +242,21 @@ final class ShelfSelectionTests: XCTestCase {
         XCTAssertEqual(f.board.string(forType: .string), batch.contextText)
         XCTAssertNil(f.board.data(forType: .png))
         XCTAssertTrue(f.store.statusNotice?.message.contains("Screenshots unavailable for shots 1") == true)
+    }
+
+    @MainActor
+    private func waitForPreparedBatch(_ store: CaptureStore,
+                                      file: StaticString = #filePath, line: UInt = #line) async throws -> CaptureBatch {
+        for _ in 0..<200 {
+            if !store.isPreparingBatch {
+                return try XCTUnwrap(store.selectedBatch, "Preparation finished without a selected batch.",
+                                     file: file, line: line)
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTFail("Selected batch did not finish preparation within two seconds.", file: file, line: line)
+        throw NSError(domain: "ShelfSelectionTests", code: 1,
+                      userInfo: [NSLocalizedDescriptionKey: "Selected batch preparation timed out."])
     }
 
     @MainActor
@@ -247,6 +274,7 @@ final class ShelfSelectionTests: XCTestCase {
 
     private func shot(_ name: String) -> CaptureResult {
         CaptureResult(appName: name, bundleIdentifier: "test.batch", windowTitle: "Window \(name)",
+                      axTree: [AXNode(id: 1, role: "AXStaticText", roleDescription: "text", value: "Content for \(name)")],
                       accessibilityText: "Content for \(name)")
     }
 }

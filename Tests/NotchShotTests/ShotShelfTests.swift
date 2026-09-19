@@ -129,6 +129,74 @@ final class ShotShelfTests: XCTestCase {
     }
 
     @MainActor
+    func testClearingCollapsedShelfRemovesAllShotsAndSelectionWithoutChangingClipboard() throws {
+        let (preferences, clipboard) = isolatedStoreDependencies()
+        preferences.set(false, forKey: "copySoundEnabled")
+        let store = CaptureStore(preferences: preferences, clipboard: clipboard)
+        defer { store.stop() }
+        let shots = [makeCapture(), makeCapture(), makeCapture()]
+        store.captures = shots
+        store.copyContent = .screenshotAndTree
+        XCTAssertTrue(store.copyCapture(shots[0].id))
+        let copiedText = try XCTUnwrap(clipboard.string(forType: .string))
+        let copiedImage = try XCTUnwrap(clipboard.data(forType: .png))
+        let clipboardRevision = clipboard.changeCount
+        store.selectedID = shots[1].id
+        store.selectAllShelfShots()
+        store.pendingCapture = makeCapture()
+        var dismissCount = 0
+        store.onDismissCard = { dismissCount += 1 }
+        XCTAssertFalse(store.isExpanded)
+        XCTAssertEqual(store.selectedShotCount, 3)
+
+        store.clearHistory()
+
+        XCTAssertFalse(store.isExpanded, "Clearing from the small notch must not open the shelf.")
+        XCTAssertEqual(store.page, .shelf)
+        XCTAssertTrue(store.captures.isEmpty)
+        XCTAssertNil(store.pendingCapture)
+        XCTAssertNil(store.selectedID)
+        XCTAssertFalse(store.isSelectingShots)
+        XCTAssertEqual(store.selectedShotCount, 0)
+        XCTAssertNil(store.selectedBatch)
+        XCTAssertFalse(store.isPreparingBatch)
+        XCTAssertFalse(store.isLandingCapture)
+        XCTAssertEqual(dismissCount, 1)
+        XCTAssertEqual(store.statusNotice?.title, "Cleared")
+        XCTAssertEqual(clipboard.changeCount, clipboardRevision)
+        XCTAssertEqual(clipboard.string(forType: .string), copiedText)
+        XCTAssertEqual(clipboard.data(forType: .png), copiedImage)
+    }
+
+    @MainActor
+    func testClearingBeforeExternalImportCompletesKeepsShelfEmptyAndClearNotice() async throws {
+        let store = makeStore()
+        defer { store.stop() }
+        let pasteboard = NSPasteboard(name: .init("NotchShot-ShelfImportTest-\(UUID())"))
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.declareTypes([.string], owner: nil)
+        XCTAssertTrue(pasteboard.setString("An external note waiting to be imported", forType: .string))
+
+        XCTAssertTrue(store.receiveDrop(pasteboard))
+        XCTAssertTrue(store.isImporting)
+        // Stay on this main-actor turn so the import cannot finish before Clear.
+        store.clearHistory()
+        let clearNotice = try XCTUnwrap(store.statusNotice)
+        XCTAssertEqual(clearNotice.title, "Cleared")
+
+        for _ in 0..<200 {
+            if !store.isImporting { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+
+        XCTAssertFalse(store.isImporting, "The abandoned import must eventually release its busy state.")
+        XCTAssertTrue(store.captures.isEmpty)
+        XCTAssertNil(store.pendingCapture)
+        XCTAssertNil(store.selectedID)
+        XCTAssertEqual(store.statusNotice, clearNotice, "A late import must not replace the Clear confirmation.")
+    }
+
+    @MainActor
     func testDismissingPendingCardKeepsHistoryAndIgnoresLateAcceptedDrag() {
         let store = makeStore()
         defer { store.stop() }

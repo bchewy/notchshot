@@ -30,7 +30,9 @@ jobs:
 
       - name: Test
         shell: bash
-        run: swift test --disable-sandbox 2>&1 | tee test-output.log
+        run: |
+          set -o pipefail
+          swift test --disable-sandbox 2>&1 | tee test-output.log
 
       - name: Test summary
         if: always()

@@ -141,19 +141,7 @@ final class CaptureService: CaptureServing {
         try Task.checkCancellation()
         let axResult = try await accessibility
         try Task.checkCancellation()
-        result.axTree = axResult.tree
-        result.accessibilityText = axResult.text
-        result.warnings += axResult.warnings
-        if !result.axTree.isEmpty {
-            result.warnings.append("Accessibility content is what this app exposes for the selected window and can include content outside the visible scroll area.")
-        }
-        // Chromium can expose toolbar controls before its document AX tree is
-        // enabled. Do not mistake a large toolbar for captured page content.
-        let browserWithoutDocument = Self.isChromiumBrowser(result.bundleIdentifier)
-            && !Self.containsWebContent(result.axTree)
-        if browserWithoutDocument, !result.axTree.isEmpty {
-            result.warnings.append("This browser exposed controls but no web document tree. Its accessibility support may still be loading; try another capture. NotchShot does not change browser settings.")
-        }
+        let browserWithoutDocument = Self.applyAccessibility(axResult, to: &result)
         // OCR is a local fallback only. It is never presented as accessibility text.
         if let image, result.accessibilityText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || result.elementCount < 5 || browserWithoutDocument {
             do {
@@ -173,6 +161,30 @@ final class CaptureService: CaptureServing {
             throw CaptureServiceError.nothingCaptured(result.warnings.joined(separator: "\n\n"))
         }
         return result
+    }
+
+    /// Preserve the reader's completeness signal alongside its hierarchy. The
+    /// general capture notes can also describe screenshots or OCR and must not
+    /// determine whether a copied accessibility tree is complete.
+    @discardableResult
+    nonisolated static func applyAccessibility(_ axResult: AccessibilityReadResult,
+                                               to result: inout CaptureResult) -> Bool {
+        result.axTree = axResult.tree
+        result.accessibilityText = axResult.text
+        result.accessibilityTreeIncomplete = !axResult.warnings.isEmpty
+        result.warnings += axResult.warnings
+        if !result.axTree.isEmpty {
+            result.warnings.append("Accessibility content is what this app exposes for the selected window and can include content outside the visible scroll area.")
+        }
+        // Chromium can expose toolbar controls before its document AX tree is
+        // enabled. Do not mistake a large toolbar for captured page content.
+        let browserWithoutDocument = isChromiumBrowser(result.bundleIdentifier)
+            && !containsWebContent(result.axTree)
+        if browserWithoutDocument, !result.axTree.isEmpty {
+            result.accessibilityTreeIncomplete = true
+            result.warnings.append("This browser exposed controls but no web document tree. Its accessibility support may still be loading; try another capture. NotchShot does not change browser settings.")
+        }
+        return browserWithoutDocument
     }
 
     private func screenshot(windowID: UInt32, pid: Int32) async throws -> (image: CGImage, windowFrame: CGRect) {

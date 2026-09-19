@@ -6,6 +6,7 @@ import SwiftUI
 struct ShotHoverPreviewView: View {
     static let size = CGSize(width: 320, height: 264)
 
+    @Environment(\.notchTheme) private var theme
     let capture: CaptureResult
     let canCopy: Bool
     let copyLabel: String
@@ -33,7 +34,7 @@ struct ShotHoverPreviewView: View {
                     } else {
                         Image(systemName: "rectangle.on.rectangle")
                             .font(.system(size: 20, weight: .light))
-                            .foregroundStyle(NotchStyle.accent)
+                            .foregroundStyle(theme.accent)
                     }
                 }
                 .frame(width: 28, height: 28)
@@ -73,7 +74,7 @@ struct ShotHoverPreviewView: View {
                         .foregroundStyle(.white.opacity(0.4))
                 }
                 .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(NotchStyle.accent.opacity(0.9))
+                .foregroundStyle(theme.accent.opacity(0.9))
             }
             .frame(height: 24)
         }

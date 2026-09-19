@@ -72,6 +72,7 @@ private struct ShutterSoundTile: View {
 }
 
 private struct ShutterTileButtonStyle: ButtonStyle {
+    @Environment(\.notchTheme) private var theme
     let selected: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var hovering = false
@@ -85,24 +86,24 @@ private struct ShutterTileButtonStyle: ButtonStyle {
                     .overlay {
                         if selected {
                             RoundedRectangle(cornerRadius: 11)
-                                .fill(NotchStyle.accent.opacity(0.035))
+                                .fill(theme.accent.opacity(0.035))
                         }
                     }
             }
             .overlay {
                 RoundedRectangle(cornerRadius: 11)
-                    .strokeBorder(selected ? NotchStyle.accent.opacity(0.65) : Color.white.opacity(hovering ? 0.2 : 0.1), lineWidth: 1)
+                    .strokeBorder(selected ? theme.accent.opacity(0.65) : Color.white.opacity(hovering ? 0.2 : 0.1), lineWidth: 1)
             }
             .overlay(alignment: .topTrailing) {
                 if selected {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(NotchStyle.accent)
+                        .foregroundStyle(theme.accent)
                         .padding(7)
                         .accessibilityHidden(true)
                 }
             }
-            .shadow(color: selected ? NotchStyle.accent.opacity(0.06) : .clear, radius: 5, y: 2)
+            .shadow(color: selected ? theme.accent.opacity(0.06) : .clear, radius: 5, y: 2)
             .contentShape(RoundedRectangle(cornerRadius: 11))
             .scaleEffect(reduceMotion ? 1 : configuration.isPressed ? 0.98 : raised ? 1.025 : 1)
             .offset(y: reduceMotion ? 0 : raised ? -1.5 : 0)

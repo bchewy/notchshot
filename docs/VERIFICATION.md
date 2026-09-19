@@ -1,3 +1,21 @@
+# Copy choices, themes, and display following — 0.6.0 preview (build 29)
+
+## Changes
+
+- Screenshot plus AX tree is the default copy payload. Image-only and tree-only choices apply consistently to manual, automatic, hover, and multi-shot copy. Full trees preserve structure; Compact includes clearly marked excerpts without silently substituting OCR.
+- Six saved color themes, an integrated Settings scrollbar, one-click clearing from the compact notch, and optional pointer-based display following. Moving the notch retains the shelf and current page and waits during active interactions.
+- Preview builds record their exact source commit. The packaging helper checks signatures, source identity, archive integrity, and executable hashes before creating matching app/source ZIPs. Staging a preview leaves the installed app running.
+- Cancellation reaches detached accessibility/OCR workers and prevents later stages from publishing abandoned captures. Clipboard restoration reports failures, preserves newer copies, and survives repeated cancellation. Copy-collapse tests use controlled deadlines, with a generation guard against stale callbacks.
+
+## Verification
+
+- **377 tests passed with zero failures or skips** in both local debug and optimized release configurations. Coverage includes clipboard payloads and restoration failures, capture cancellation, selection, display topology changes, preserved native panel state, interaction deferral, and capture-card completion outside display bounds. GitHub CI retains the existing native-motion skip tracked in issue #2.
+- Live checks on the preceding signed development build passed for theme selection, scrollbar wheel/drag/track controls, shortcut editing/cancellation, copy-content settings, permissions, and three-second auto-collapse.
+- That manual pass found a scrollbar keyboard-focus issue. Its source fix builds and passes the suite; installed Home/End behavior still requires confirmation.
+- Final physical capture/paste and clear-all checks, pointer-driven movement between monitors, and cross-display capture choreography remain pending in this preview. Automated native/policy tests are not a substitute for those receiver and physical-input checks.
+- Distribution remains an early preview, without Apple notarization. Paste support varies by destination; image-only batches require a receiver that accepts multiple images in a rich document.
+- The website retains its verified 0.5.2 app/source downloads while 0.6.0 signing and final installed-build verification remain pending. Its links, version label, local assets, and layout were checked in a browser before merging source changes.
+
 # Mint photographer mascot — 0.5.2 (build 28)
 
 ## Behavior

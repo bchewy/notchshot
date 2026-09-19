@@ -5,6 +5,7 @@ import SwiftUI
 /// Brief feedback lives in the existing header slot. Opening its details keeps
 /// a separate snapshot, so the expiry timer never dismisses something being read.
 struct StatusNoticeView: View {
+    @Environment(\.notchTheme) private var theme
     let notice: StatusNotice?
     let store: CaptureStore
 
@@ -30,9 +31,9 @@ struct StatusNoticeView: View {
                     Label(current.title, systemImage: symbol(for: current))
                         .font(.system(size: 9, weight: .semibold))
                         .lineLimit(1)
-                        .foregroundStyle(noticeTint(for: current))
+                        .foregroundStyle(noticeTint(for: current, theme: theme))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background(noticeTint(for: current).opacity(0.1), in: Capsule())
+                        .background(noticeTint(for: current, theme: theme).opacity(0.1), in: Capsule())
                         .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -45,9 +46,9 @@ struct StatusNoticeView: View {
                 Label("ON DEVICE", systemImage: "lock.fill")
                     .font(.system(size: 8, weight: .semibold, design: .monospaced))
                     .tracking(0.7)
-                    .foregroundStyle(NotchStyle.accent.opacity(0.85))
+                    .foregroundStyle(theme.accent.opacity(0.85))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(NotchStyle.accent.opacity(0.08), in: Capsule())
+                    .background(theme.accent.opacity(0.08), in: Capsule())
                     .help("Captures stay on this Mac until you copy or export them.")
                     .transition(.opacity)
             }
@@ -74,6 +75,7 @@ struct StatusNoticeView: View {
 }
 
 private struct StatusNoticeDetailsView: View {
+    @Environment(\.notchTheme) private var theme
     let notice: StatusNotice
     let dismiss: () -> Void
     @State private var messageHeight: CGFloat = 44
@@ -83,7 +85,7 @@ private struct StatusNoticeDetailsView: View {
             HStack(spacing: 8) {
                 Label(notice.title, systemImage: symbol(for: notice))
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(noticeTint(for: notice))
+                    .foregroundStyle(noticeTint(for: notice, theme: theme))
                 Spacer()
                 Button(action: dismiss) { Image(systemName: "xmark") }
                     .buttonStyle(NotchIconButtonStyle())
@@ -114,7 +116,7 @@ private struct StatusNoticeDetailsView: View {
                 }
                 .buttonStyle(.borderless)
                 .font(.system(size: 11, weight: .medium))
-                .tint(NotchStyle.accent)
+                .tint(theme.accent)
                 .help("Reveal the exported capture folder in Finder.")
             }
         }
@@ -132,6 +134,6 @@ private func symbol(for notice: StatusNotice) -> String {
     }
 }
 
-private func noticeTint(for notice: StatusNotice) -> Color {
-    notice.kind == .error ? .orange : NotchStyle.accent
+private func noticeTint(for notice: StatusNotice, theme: NotchTheme) -> Color {
+    notice.kind == .error ? .orange : theme.accent
 }

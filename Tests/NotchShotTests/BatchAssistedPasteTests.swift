@@ -47,7 +47,8 @@ final class BatchAssistedPasteTests: XCTestCase {
         XCTAssertEqual(fixture.environment.posts.compactMap(\.png), [fixture.batch.captures[0].pngData!, fixture.batch.captures[3].pngData!])
         XCTAssertEqual(fixture.environment.posts.last?.text, fixture.batch.contextText)
         for capture in fixture.batch.captures {
-            XCTAssertTrue(fixture.environment.posts.last?.text?.contains(capture.accessibilityText) == true)
+            XCTAssertTrue(fixture.environment.posts.last?.text?.contains(capture.treeText) == true)
+            XCTAssertFalse(fixture.environment.posts.last?.text?.contains(capture.accessibilityText) == true)
         }
         try await fixture.restore()
     }
@@ -71,7 +72,7 @@ final class BatchAssistedPasteTests: XCTestCase {
             var captures = fixture.batch.captures
             if mutation == 0 { captures[0].id = UUID() }
             if mutation == 1 { captures.reverse() }
-            if mutation == 2 { captures[1].accessibilityText = "A different context" }
+            if mutation == 2 { captures[1].axTree[0].value = "A different context" }
             if mutation == 3 { captures[2].pngData = captures[0].pngData }
             let changed = CaptureBatch(captures: captures, contextStyle: fixture.batch.contextStyle)
             let originals = fixture.representations()
@@ -259,6 +260,7 @@ final class BatchAssistedPasteTests: XCTestCase {
             }
             return CaptureResult(appName: "Fixture app \(index + 1)", bundleIdentifier: "com.example.batch.\(index)",
                                  windowTitle: "Window \(index + 1)", pngData: png,
+                                 axTree: [AXNode(id: 1, role: "AXStaticText", roleDescription: "text", value: "Unique tree \(index + 1) — 你好 📷")],
                                  accessibilityText: "Unique context \(index + 1) — 你好 📷")
         }
         let fixture = BatchPasteFixture(batch: CaptureBatch(captures: captures, contextStyle: .full))

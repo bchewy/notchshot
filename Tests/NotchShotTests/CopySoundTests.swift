@@ -48,7 +48,7 @@ final class CopySoundTests: XCTestCase {
 
         XCTAssertTrue(store.copyCapture(capture.id))
         XCTAssertEqual(fixture.sound.playCount, 1)
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.clipboardText)
         XCTAssertEqual(fixture.clipboard.data(forType: .png), capture.pngData)
         store.copyImage()
         XCTAssertEqual(fixture.sound.playCount, 2)
@@ -95,7 +95,7 @@ final class CopySoundTests: XCTestCase {
         store.copySoundEnabled = false
         store.captureSoundVolume = 0.23
         XCTAssertTrue(store.copyCapture(capture.id))
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.clipboardText)
         XCTAssertEqual(fixture.sound.playCount, 0)
         XCTAssertEqual(fixture.sound.volumes.last ?? -1, 0.23, accuracy: 0.001)
 
@@ -134,7 +134,7 @@ final class CopySoundTests: XCTestCase {
         store.isCapturing = false
         store.autoCopyCompletedCapture(capture)
         XCTAssertEqual(fixture.sound.playCount, 1)
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.clipboardText)
         fixture.clipboard.clearContents()
         fixture.clipboard.setString("Copied later in another app", forType: .string)
         let laterChangeCount = fixture.clipboard.changeCount
@@ -150,7 +150,7 @@ final class CopySoundTests: XCTestCase {
         let muted = makeCapture("Muted automatic copy")
         store.autoCopyCompletedCapture(muted)
         XCTAssertEqual(fixture.sound.playCount, 1)
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), muted.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), muted.clipboardText)
     }
 
     @MainActor

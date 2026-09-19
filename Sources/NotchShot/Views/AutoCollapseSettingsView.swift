@@ -2,6 +2,7 @@
 import SwiftUI
 
 struct AutoCollapseSettingsView: View {
+    @Environment(\.notchTheme) private var theme
     @Bindable var store: CaptureStore
 
     var body: some View {
@@ -17,7 +18,7 @@ struct AutoCollapseSettingsView: View {
                 }
             }
             .toggleStyle(.checkbox)
-            .tint(NotchStyle.accent)
+            .tint(theme.accent)
             .accessibilityLabel("Collapse when away")
             .accessibilityHint("Automatically collapse after moving away. Stays open while you interact or a capture arrives.")
 

@@ -5,7 +5,20 @@ import XCTest
 
 final class CaptureClipboardTests: XCTestCase {
     @MainActor
-    func testNativeRichTextPasteReceivesScreenshotThenCompleteContext() throws {
+    func testIncompleteTreeCopyDisclosesCaptureLimitsWithoutDuplicatingOtherSources() throws {
+        var capture = try makeCapture()
+        capture.accessibilityTreeIncomplete = true
+        let item = CaptureClipboardService.makeItem(for: capture)
+        let text = try XCTUnwrap(item.string(forType: .string))
+        XCTAssertTrue(text.hasPrefix("[Accessibility tree is incomplete:"))
+        XCTAssertTrue(text.hasSuffix(capture.treeText))
+        XCTAssertFalse(text.contains(capture.ocrText))
+        XCTAssertFalse(text.contains(capture.accessibilityText))
+        XCTAssertEqual(item.data(forType: .png), capture.pngData)
+    }
+
+    @MainActor
+    func testNativeRichTextPasteReceivesScreenshotThenExactAccessibilityTree() throws {
         let capture = try makeCapture()
         let clipboard = makeClipboard()
         XCTAssertTrue(clipboard.writeObjects([CaptureClipboardService.makeItem(for: capture)]))
@@ -14,6 +27,10 @@ final class CaptureClipboardTests: XCTestCase {
         XCTAssertTrue(receiver.readSelection(from: clipboard))
 
         try assertCombinedPaste(receiver, matches: capture)
+        XCTAssertFalse(receiver.string.contains(capture.accessibilityText))
+        XCTAssertFalse(receiver.string.contains(capture.ocrText))
+        XCTAssertFalse(receiver.string.contains(capture.importedText))
+        XCTAssertFalse(receiver.string.contains("## Capture notes"))
     }
 
     @MainActor
@@ -26,7 +43,7 @@ final class CaptureClipboardTests: XCTestCase {
         receiver.importsGraphics = false
 
         XCTAssertTrue(receiver.readSelection(from: clipboard))
-        XCTAssertEqual(receiver.string, capture.contextText)
+        XCTAssertEqual(receiver.string, capture.clipboardText)
         XCTAssertFalse(receiver.string.contains("\u{FFFC}"))
     }
 
@@ -42,7 +59,7 @@ final class CaptureClipboardTests: XCTestCase {
         XCTAssertNotNil(item.data(forType: .rtfd))
         XCTAssertNotNil(item.string(forType: .html))
         XCTAssertEqual(item.data(forType: .png), capture.pngData)
-        XCTAssertEqual(item.string(forType: .string), capture.contextText)
+        XCTAssertEqual(item.string(forType: .string), capture.clipboardText)
         let tiff = try XCTUnwrap(item.data(forType: .tiff))
         let decoded = try XCTUnwrap(NSBitmapImageRep(data: tiff))
         XCTAssertEqual(decoded.pixelsWide, 3)
@@ -68,11 +85,28 @@ final class CaptureClipboardTests: XCTestCase {
         XCTAssertTrue(html.contains("&lt;/script&gt;"))
         XCTAssertTrue(html.contains("A &amp; B"))
         XCTAssertTrue(html.contains("&quot;capture&quot;"))
-        XCTAssertTrue(html.contains("## Accessibility tree"))
+        XCTAssertFalse(html.contains("## Accessibility tree"))
         XCTAssertTrue(html.contains("button Save &amp; close"))
         let imagePosition = try XCTUnwrap(html.range(of: "data:image/png;base64,"))
-        let contextPosition = try XCTUnwrap(html.range(of: "# Appshot"))
+        let contextPosition = try XCTUnwrap(html.range(of: "Window: &quot;Window"))
         XCTAssertLessThan(imagePosition.lowerBound, contextPosition.lowerBound)
+    }
+
+    @MainActor
+    func testMissingTreeIsExplicitAndDoesNotMislabelOCRAsAccessibilityContent() throws {
+        var capture = try makeCapture()
+        capture.axTree = []
+        let item = CaptureClipboardService.makeItem(for: capture)
+        let text = try XCTUnwrap(item.string(forType: .string))
+        XCTAssertEqual(text, "Window: \"\(capture.windowTitle)\", App: \(capture.appName).\nNo accessibility tree was available for this shot.")
+        XCTAssertFalse(text.contains(capture.ocrText))
+        XCTAssertFalse(text.contains(capture.accessibilityText))
+        XCTAssertFalse(text.contains(capture.importedText))
+        XCTAssertEqual(item.data(forType: .png), capture.pngData)
+        // Detailed source data remains available to explicit text copies/exports.
+        XCTAssertTrue(capture.contextText.contains(capture.ocrText))
+        XCTAssertTrue(capture.contextText.contains(capture.accessibilityText))
+        XCTAssertTrue(capture.contextText.contains(capture.importedText))
     }
 
     @MainActor
@@ -131,8 +165,8 @@ final class CaptureClipboardTests: XCTestCase {
     private func assertCombinedPaste(_ receiver: NSTextView, matches capture: CaptureResult,
                                      file: StaticString = #filePath, line: UInt = #line) throws {
         let content = receiver.attributedString()
-        XCTAssertTrue(content.string.hasSuffix(capture.contextText), "A rich paste must retain every context section exactly.", file: file, line: line)
-        let prefixLength = content.string.count - capture.contextText.count
+        XCTAssertTrue(content.string.hasSuffix(capture.treeText), "A rich paste must retain the hierarchy exactly.", file: file, line: line)
+        let prefixLength = content.string.count - capture.clipboardText.count
         XCTAssertGreaterThan(prefixLength, 0, file: file, line: line)
         if prefixLength > 0 {
             let prefix = String(content.string.prefix(prefixLength))
@@ -158,7 +192,7 @@ final class CaptureClipboardTests: XCTestCase {
         XCTAssertNil(item.data(forType: .png), file: file, line: line)
         XCTAssertNil(item.data(forType: .tiff), file: file, line: line)
         XCTAssertNil(item.data(forType: .rtfd), file: file, line: line)
-        XCTAssertEqual(item.string(forType: .string), capture.contextText, file: file, line: line)
+        XCTAssertEqual(item.string(forType: .string), capture.clipboardText, file: file, line: line)
         let html = try XCTUnwrap(item.string(forType: .html), file: file, line: line)
         XCTAssertFalse(html.contains("data:image/"), file: file, line: line)
         XCTAssertFalse(html.contains("<script>"), file: file, line: line)
@@ -166,7 +200,7 @@ final class CaptureClipboardTests: XCTestCase {
         receiver.isRichText = false
         receiver.importsGraphics = false
         XCTAssertTrue(receiver.readSelection(from: clipboard), file: file, line: line)
-        XCTAssertEqual(receiver.string, capture.contextText, file: file, line: line)
+        XCTAssertEqual(receiver.string, capture.clipboardText, file: file, line: line)
     }
 
     @MainActor
@@ -210,7 +244,8 @@ final class CaptureClipboardTests: XCTestCase {
                              windowTitle: "Window <name> \"quoted\"",
                              pngData: try XCTUnwrap(bitmap.representation(using: .png, properties: [:])),
                              axTree: [AXNode(id: 1, role: "AXGroup", roleDescription: "group", title: "Root",
-                                             children: [AXNode(id: 2, role: "AXButton", roleDescription: "button", title: "Save & close")])],
+                                             children: [AXNode(id: 2, role: "AXButton", roleDescription: "button", title: "Save & close"),
+                                                        AXNode(id: 3, role: "AXStaticText", roleDescription: "text", value: "<script>alert(\"capture\")</script> — 你好 📷")])],
                              accessibilityText: "First line\n<script>alert(\"capture\")</script>\nLast line — 你好 📷",
                              ocrText: "OCR text <with> symbols", importedText: "Imported 'context'",
                              warnings: ["Fixture note & complete context"])

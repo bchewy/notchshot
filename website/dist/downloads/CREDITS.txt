@@ -1,6 +1,9 @@
 # Third-party notices
 
-NotchShot is licensed under GPL-3.0-only. See LICENSE.
+The combined NotchShot application is licensed under GPL-3.0-only. See LICENSE.
+Brian Chew's independent original code and website source are also available
+under LICENSE-MIT, with the scope and exceptions in LICENSING.md. This does not
+relicense the Notchi-derived code or third-party assets.
 
 ## Notchi
 

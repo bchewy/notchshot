@@ -37,8 +37,8 @@ See [third-party notices](THIRD_PARTY_NOTICES.md).
 - Camera illustrations are generated assets; their provenance is recorded in
   [docs/CAMERA_ICONS.md](docs/CAMERA_ICONS.md). They are not official Fujifilm assets.
 - Demo video, poster, and other media are separate from the MIT source-code grant.
-- `website/dist/downloads/` preserves the existing 0.5.2 preview distribution,
-  including its paired GPL source archive and attribution. The new MIT grant
-  does not relabel these existing release files.
+- `website/dist/downloads/` contains immutable preview distributions with paired
+  GPL source archives and attribution. The original 0.5.2 snapshots retain their
+  original licensing; the additional MIT grant does not relabel those files.
 
 Repository visibility does not change these licenses.

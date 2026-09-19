@@ -11,7 +11,7 @@ final class AssistedPasteTests: XCTestCase {
         let originalRTFD = original.data(forType: .rtfd)
         XCTAssertTrue(fixture.arm())
         XCTAssertTrue(fixture.service.isArmed)
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), fixture.capture.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), fixture.capture.clipboardText)
 
         XCTAssertTrue(fixture.emit(.paste(isRepeat: false)))
         try await waitUntil { fixture.environment.posts.count == 1 && fixture.sleep.contains(AssistedPasteFixture.imageDelay) }
@@ -24,7 +24,8 @@ final class AssistedPasteTests: XCTestCase {
         try await fixture.advanceImageDelay()
         XCTAssertEqual(fixture.environment.posts.count, 2)
         XCTAssertNil(fixture.environment.posts[1].png)
-        XCTAssertEqual(fixture.environment.posts[1].text, fixture.capture.contextText)
+        XCTAssertEqual(fixture.environment.posts[1].text, fixture.capture.clipboardText)
+        XCTAssertEqual(fixture.environment.posts[1].text, "Window: \"Fixture window\", App: Assisted paste fixture.\nbutton Complete tree")
         XCTAssertEqual(fixture.environment.posts[1].target, fixture.environment.posts[0].target)
 
         try await fixture.advanceRestoreDelay()
@@ -32,7 +33,7 @@ final class AssistedPasteTests: XCTestCase {
         XCTAssertFalse(fixture.service.isPasting)
         XCTAssertEqual(fixture.clipboard.data(forType: .rtfd), originalRTFD)
         XCTAssertEqual(fixture.clipboard.data(forType: .png), fixture.capture.pngData)
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), fixture.capture.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), fixture.capture.clipboardText)
         XCTAssertFalse(fixture.emit(.paste(isRepeat: false)), "Assistance consumes only the next paste after copying a shot.")
         XCTAssertEqual(fixture.environment.posts.count, 2)
     }
@@ -49,7 +50,7 @@ final class AssistedPasteTests: XCTestCase {
             XCTAssertFalse(fixture.emit(.paste(isRepeat: false)))
 
             XCTAssertEqual(fixture.clipboard.changeCount, changeCount)
-            XCTAssertEqual(fixture.clipboard.string(forType: .string), fixture.capture.contextText)
+            XCTAssertEqual(fixture.clipboard.string(forType: .string), fixture.capture.clipboardText)
             XCTAssertTrue(fixture.environment.posts.isEmpty)
             XCTAssertFalse(fixture.service.isPasting)
         }
@@ -83,7 +84,7 @@ final class AssistedPasteTests: XCTestCase {
 
         XCTAssertTrue(fixture.environment.posts.isEmpty)
         XCTAssertEqual(fixture.environment.fallbacks.map(\.processIdentifier), [42])
-        XCTAssertEqual(fixture.environment.fallbacks.first?.text, fixture.capture.contextText)
+        XCTAssertEqual(fixture.environment.fallbacks.first?.text, fixture.capture.clipboardText)
         XCTAssertEqual(fixture.environment.fallbacks.first?.png, fixture.capture.pngData)
         XCTAssertNotNil(fixture.environment.fallbacks.first?.rtfd)
         XCTAssertEqual(fixture.clipboard.changeCount, changeCount)
@@ -194,7 +195,7 @@ final class AssistedPasteTests: XCTestCase {
         XCTAssertFalse(fixture.service.isPasting)
         XCTAssertEqual(fixture.clipboard.changeCount, changeCount)
         XCTAssertNotNil(fixture.clipboard.data(forType: .rtfd))
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), fixture.capture.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), fixture.capture.clipboardText)
         XCTAssertTrue(fixture.environment.posts.isEmpty)
     }
 
@@ -205,7 +206,7 @@ final class AssistedPasteTests: XCTestCase {
             var invalidCapture = fixture.capture
             if invalidCase == 0 { invalidCapture.pngData = nil }
             else if invalidCase == 1 { invalidCapture.pngData = Data("broken image".utf8) }
-            else { invalidCapture.accessibilityText = "This capture does not match the copied shot" }
+            else { invalidCapture.axTree[0].title = "This capture does not match the copied shot" }
             let changeCount = fixture.clipboard.changeCount
 
             XCTAssertFalse(fixture.service.arm(capture: invalidCapture, clipboard: fixture.clipboard))
@@ -304,7 +305,7 @@ final class AssistedPasteTests: XCTestCase {
             XCTAssertEqual(fixture.clipboard.changeCount, stagedChangeCount,
                            "Cancellation must invalidate the sequence immediately and defer large clipboard restoration until after the event callback.")
             if hasNewCopy { fixture.copyUnrelatedText("New content before deferred cleanup") }
-            let expectedText = hasNewCopy ? "New content before deferred cleanup" : fixture.capture.contextText
+            let expectedText = hasNewCopy ? "New content before deferred cleanup" : fixture.capture.clipboardText
             let latestChangeCount = fixture.clipboard.changeCount
             try await fixture.advanceImageDelay(expectSecondPost: false)
             try await waitUntil { fixture.clipboard.string(forType: .string) == expectedText }
@@ -409,7 +410,7 @@ final class AssistedPasteTests: XCTestCase {
 
         XCTAssertEqual(fixture.environment.posts.count, 1)
         XCTAssertEqual(fixture.clipboard.changeCount, newChangeCount)
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), newCapture.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), newCapture.clipboardText)
         XCTAssertTrue(fixture.service.isArmed)
         XCTAssertFalse(fixture.service.isPasting)
     }
@@ -430,7 +431,7 @@ final class AssistedPasteTests: XCTestCase {
             XCTAssertEqual(fixture.environment.posts.count, failedPhase)
             XCTAssertFalse(fixture.service.isArmed)
             XCTAssertEqual(fixture.clipboard.data(forType: .png), fixture.capture.pngData)
-            XCTAssertEqual(fixture.clipboard.string(forType: .string), fixture.capture.contextText)
+            XCTAssertEqual(fixture.clipboard.string(forType: .string), fixture.capture.clipboardText)
         }
     }
 
@@ -571,7 +572,7 @@ final class AssistedPasteTests: XCTestCase {
             XCTAssertEqual(fixture.results, [.cancelled("Paste assistance stopped because you started another action.")])
             XCTAssertEqual(fixture.writer.writeCount, 2)
             XCTAssertEqual(fixture.clipboard.data(forType: .png), fixture.capture.pngData)
-            XCTAssertEqual(fixture.clipboard.string(forType: .string), fixture.capture.contextText)
+            XCTAssertEqual(fixture.clipboard.string(forType: .string), fixture.capture.clipboardText)
             XCTAssertNotNil(fixture.clipboard.data(forType: .rtfd))
             fixture.sleep.resumeAll()
             for _ in 0..<5 { await Task.yield() }
@@ -602,7 +603,7 @@ final class AssistedPasteTests: XCTestCase {
         XCTAssertTrue(fixture.results.isEmpty, "A superseded cleanup must not report over the newly armed shot.")
         XCTAssertEqual(fixture.writer.writeCount, 1)
         XCTAssertEqual(fixture.clipboard.changeCount, newChangeCount)
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), fixture.capture.contextText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), fixture.capture.clipboardText)
     }
 
     @MainActor

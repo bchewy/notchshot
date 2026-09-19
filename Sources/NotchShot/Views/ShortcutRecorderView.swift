@@ -5,6 +5,7 @@ import SwiftUI
 /// SwiftUI owns the saved shortcut. This native button owns keyboard focus only
 /// during an explicitly requested recording session.
 struct ShortcutRecorderView: NSViewRepresentable {
+    @Environment(\.notchTheme) private var theme
     let shortcut: CaptureShortcut
     @Binding var isRecording: Bool
     @Binding var validationMessage: String?
@@ -18,6 +19,7 @@ struct ShortcutRecorderView: NSViewRepresentable {
         button.onRecordingChange = { isRecording = $0 }
         button.onValidationChange = { validationMessage = $0 }
         button.onRecord = onRecord
+        button.accentColor = theme.nsAccent
         button.setShortcut(shortcut)
         if !isRecording { button.endRecording(notify: false) }
     }
@@ -39,6 +41,9 @@ struct ShortcutRecorderView: NSViewRepresentable {
 
 final class ShortcutRecorderButton: NSButton {
     private(set) var isRecording = false
+    var accentColor = NotchTheme.mint.nsAccent {
+        didSet { updateAppearance() }
+    }
     var onRecordingChange: ((Bool) -> Void)?
     var onValidationChange: ((String?) -> Void)?
     var onRecord: ((CaptureShortcut) -> Void)?
@@ -179,7 +184,7 @@ final class ShortcutRecorderButton: NSButton {
         title = isRecording ? "Press keys…" : shortcut.displayString
         layer?.backgroundColor = NSColor.white.withAlphaComponent(isRecording ? 0.1 : 0.055).cgColor
         layer?.borderColor = isRecording
-            ? NSColor(red: 0.54, green: 0.91, blue: 0.77, alpha: 0.85).cgColor
+            ? accentColor.withAlphaComponent(0.85).cgColor
             : NSColor.white.withAlphaComponent(0.13).cgColor
         setAccessibilityLabel(isRecording ? "Recording capture shortcut" : "Change capture shortcut")
         setAccessibilityValue(isRecording ? "Waiting for shortcut keys" : shortcut.displayString)

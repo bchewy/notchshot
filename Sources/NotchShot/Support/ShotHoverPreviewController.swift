@@ -11,6 +11,7 @@ final class ShotHoverPreviewController {
     private var panel: ShotHoverPreviewPanel?
     private weak var activeAnchor: ShotHoverAnchorNSView?
     private var observers: [NSObjectProtocol] = []
+    private let store: CaptureStore?
     private let hoverCopy: HoverCopyShortcutService
     private let previewDelay: Duration
     private var activeCapture: CaptureResult?
@@ -19,7 +20,9 @@ final class ShotHoverPreviewController {
     private var copyLabel = "Copy shot"
     private var clickLabel = "Click shot to open"
 
-    init(hoverCopy: HoverCopyShortcutService? = nil, previewDelay: Duration = .milliseconds(120)) {
+    init(store: CaptureStore? = nil, hoverCopy: HoverCopyShortcutService? = nil,
+         previewDelay: Duration = .milliseconds(120)) {
+        self.store = store
         self.hoverCopy = hoverCopy ?? HoverCopyShortcutService()
         self.previewDelay = previewDelay
     }
@@ -65,9 +68,8 @@ final class ShotHoverPreviewController {
         self.copyLabel = copyLabel
         self.clickLabel = clickLabel
         if availabilityChanged { configureCopyShortcut() }
-        if let capture = activeCapture, let host = panel?.contentView as? NSHostingView<ShotHoverPreviewView> {
-            host.rootView = ShotHoverPreviewView(capture: capture, canCopy: hoverCopy.isRegistered,
-                                                copyLabel: copyLabel, clickLabel: clickLabel)
+        if let capture = activeCapture, let host = panel?.contentView as? NSHostingView<ThemedShotHoverPreview> {
+            host.rootView = previewView(for: capture)
         }
     }
 
@@ -113,8 +115,7 @@ final class ShotHoverPreviewController {
         let frame = Self.previewFrame(thumbnail: thumbnail, shelf: parent.frame,
                                       screen: screen.visibleFrame, size: ShotHoverPreviewView.size)
         let panel = ShotHoverPreviewPanel(contentRect: frame)
-        let host = NSHostingView(rootView: ShotHoverPreviewView(capture: capture, canCopy: hoverCopy.isRegistered,
-                                                              copyLabel: copyLabel, clickLabel: clickLabel))
+        let host = NSHostingView(rootView: previewView(for: capture))
         host.sizingOptions = []
         panel.contentView = host
         panel.setFrame(frame, display: false)
@@ -129,6 +130,11 @@ final class ShotHoverPreviewController {
                 panel.animator().alphaValue = 1
             }
         }
+    }
+
+    private func previewView(for capture: CaptureResult) -> ThemedShotHoverPreview {
+        ThemedShotHoverPreview(store: store, capture: capture, canCopy: hoverCopy.isRegistered,
+                              copyLabel: copyLabel, clickLabel: clickLabel)
     }
 
     private func observeInvalidation(of parent: NSWindow) {
@@ -158,6 +164,22 @@ final class ShotHoverPreviewController {
         return CGRect(x: min(max(thumbnail.midX - fitted.width / 2, inset.minX), inset.maxX - fitted.width),
                       y: min(max(shelf.minY - fitted.height - 8, inset.minY), inset.maxY - fitted.height),
                       width: fitted.width, height: fitted.height)
+    }
+}
+
+/// This separate hosting tree observes the selected theme while its preview is visible.
+@MainActor
+private struct ThemedShotHoverPreview: View {
+    let store: CaptureStore?
+    let capture: CaptureResult
+    let canCopy: Bool
+    let copyLabel: String
+    let clickLabel: String
+
+    var body: some View {
+        ShotHoverPreviewView(capture: capture, canCopy: canCopy,
+                             copyLabel: copyLabel, clickLabel: clickLabel)
+            .environment(\.notchTheme, store?.theme ?? .mint)
     }
 }
 
