@@ -436,6 +436,177 @@ final class AssistedPasteTests: XCTestCase {
     }
 
     @MainActor
+    func testImmediateAbortRestorationFailureReportsOnlyFailure() async throws {
+        let fixture = try makeFixture()
+        XCTAssertTrue(fixture.arm())
+        XCTAssertTrue(fixture.emit(.paste(isRepeat: false)))
+        try await waitUntil { fixture.sleep.contains(AssistedPasteFixture.imageDelay) }
+        fixture.writer.failWriteNumber = 2
+        fixture.environment.target = .init(processIdentifier: 42, focusIdentity: "a different control")
+
+        try await fixture.advanceImageDelay(expectSecondPost: false)
+        try await waitUntil { !fixture.results.isEmpty }
+
+        XCTAssertEqual(fixture.results, [.failed("Could not restore the rich shot. Copy the shot again to retry.")])
+        XCTAssertEqual(fixture.writer.writeCount, 2)
+        XCTAssertFalse(fixture.service.isPasting)
+        XCTAssertEqual(fixture.environment.posts.count, 1)
+    }
+
+    @MainActor
+    func testDeferredAbortRestorationFailureReportsOnlyFailureAfterCallback() async throws {
+        let fixture = try makeFixture()
+        XCTAssertTrue(fixture.arm())
+        XCTAssertTrue(fixture.emit(.paste(isRepeat: false)))
+        try await waitUntil { fixture.sleep.contains(AssistedPasteFixture.imageDelay) }
+        fixture.writer.failWriteNumber = 2
+        let stagedChangeCount = fixture.clipboard.changeCount
+
+        XCTAssertFalse(fixture.emit(.pointerDown))
+        XCTAssertTrue(fixture.results.isEmpty, "The cancellation notice must wait for the restoration outcome.")
+        XCTAssertEqual(fixture.writer.writeCount, 1, "Do not write from the native event callback.")
+        XCTAssertEqual(fixture.clipboard.changeCount, stagedChangeCount)
+        try await waitUntil { !fixture.results.isEmpty }
+
+        XCTAssertEqual(fixture.results, [.failed("Could not restore the rich shot. Copy the shot again to retry.")])
+        XCTAssertEqual(fixture.writer.writeCount, 2)
+        XCTAssertFalse(fixture.service.isPasting)
+        fixture.sleep.resumeAll()
+        await Task.yield()
+        XCTAssertEqual(fixture.results.count, 1, "The invalidated sequence must not also report cancellation.")
+    }
+
+    @MainActor
+    func testCancelRestorationFailureReportsFailure() async throws {
+        let fixture = try makeFixture()
+        XCTAssertTrue(fixture.arm())
+        XCTAssertTrue(fixture.emit(.paste(isRepeat: false)))
+        try await waitUntil { fixture.sleep.contains(AssistedPasteFixture.imageDelay) }
+        fixture.writer.failWriteNumber = 2
+
+        fixture.service.cancel()
+
+        XCTAssertEqual(fixture.results, [.failed("Could not restore the rich shot. Copy the shot again to retry.")])
+        XCTAssertFalse(fixture.service.isPasting)
+        XCTAssertEqual(fixture.writer.writeCount, 2)
+    }
+
+    @MainActor
+    func testSuccessfulPasteReportsRestorationFailureWithoutClaimingCancellation() async throws {
+        let fixture = try makeFixture()
+        XCTAssertTrue(fixture.arm())
+        XCTAssertTrue(fixture.emit(.paste(isRepeat: false)))
+        try await waitUntil { fixture.sleep.contains(AssistedPasteFixture.imageDelay) }
+        try await fixture.advanceImageDelay()
+        fixture.writer.failWriteNumber = 3
+
+        try await fixture.advanceRestoreDelay()
+
+        XCTAssertEqual(fixture.environment.posts.count, 2)
+        XCTAssertEqual(fixture.results, [.eventsSent, .failed("Could not restore the rich shot. Copy the shot again to retry.")])
+        XCTAssertEqual(fixture.writer.writeCount, 3)
+        XCTAssertFalse(fixture.service.isPasting)
+    }
+
+    @MainActor
+    func testDeferredRestorationSkipsInterveningCopyWithoutReportingWriteFailure() async throws {
+        let fixture = try makeFixture()
+        XCTAssertTrue(fixture.arm())
+        XCTAssertTrue(fixture.emit(.paste(isRepeat: false)))
+        try await waitUntil { fixture.sleep.contains(AssistedPasteFixture.imageDelay) }
+        fixture.writer.failWriteNumber = 2
+
+        XCTAssertFalse(fixture.emit(.pointerDown))
+        fixture.copyUnrelatedText("Keep the newer copy")
+        let newChangeCount = fixture.clipboard.changeCount
+        try await waitUntil { !fixture.results.isEmpty }
+
+        XCTAssertEqual(fixture.results, [.cancelled("Paste assistance stopped because you started another action.")])
+        XCTAssertEqual(fixture.writer.writeCount, 1, "An ownership change skips restoration entirely.")
+        XCTAssertEqual(fixture.clipboard.changeCount, newChangeCount)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), "Keep the newer copy")
+    }
+
+    @MainActor
+    func testOwnershipChangeDuringFailedRestoreIsNotReportedAsOurWriteFailure() async throws {
+        for isDeferred in [false, true] {
+            let fixture = try makeFixture()
+            XCTAssertTrue(fixture.arm())
+            XCTAssertTrue(fixture.emit(.paste(isRepeat: false)))
+            try await waitUntil { fixture.sleep.contains(AssistedPasteFixture.imageDelay) }
+            fixture.writer.replaceClipboardOnWriteNumber = 2
+
+            if isDeferred {
+                XCTAssertFalse(fixture.emit(.pointerDown))
+            } else {
+                fixture.environment.target = .init(processIdentifier: 42, focusIdentity: "a different control")
+                try await fixture.advanceImageDelay(expectSecondPost: false)
+            }
+            try await waitUntil { !fixture.results.isEmpty }
+
+            XCTAssertEqual(fixture.writer.writeCount, 2)
+            XCTAssertEqual(fixture.clipboard.string(forType: .string), "A newer clipboard owner won the write")
+            XCTAssertEqual(fixture.results.count, 1)
+            guard case .cancelled = fixture.results[0] else {
+                return XCTFail("A concurrent clipboard copy is cancellation, not our restoration failure.")
+            }
+            XCTAssertFalse(fixture.service.isPasting)
+        }
+    }
+
+    @MainActor
+    func testRepeatedCancelOrStopPreservesDeferredRestorationAndSingleNotice() async throws {
+        for shouldStop in [false, true] {
+            let fixture = try makeFixture()
+            XCTAssertTrue(fixture.arm())
+            XCTAssertTrue(fixture.emit(.paste(isRepeat: false)))
+            try await waitUntil { fixture.sleep.contains(AssistedPasteFixture.imageDelay) }
+            XCTAssertFalse(fixture.emit(.pointerDown))
+            XCTAssertFalse(fixture.service.isPasting)
+            XCTAssertTrue(fixture.results.isEmpty)
+
+            if shouldStop { fixture.service.stop() }
+            else { fixture.service.cancel() }
+            try await waitUntil { !fixture.results.isEmpty }
+
+            XCTAssertEqual(fixture.results, [.cancelled("Paste assistance stopped because you started another action.")])
+            XCTAssertEqual(fixture.writer.writeCount, 2)
+            XCTAssertEqual(fixture.clipboard.data(forType: .png), fixture.capture.pngData)
+            XCTAssertEqual(fixture.clipboard.string(forType: .string), fixture.capture.clipboardText)
+            XCTAssertNotNil(fixture.clipboard.data(forType: .rtfd))
+            fixture.sleep.resumeAll()
+            for _ in 0..<5 { await Task.yield() }
+            XCTAssertEqual(fixture.results.count, 1)
+            XCTAssertFalse(fixture.service.isArmed)
+            XCTAssertFalse(fixture.service.isPasting)
+        }
+    }
+
+    @MainActor
+    func testRearmInvalidatesDeferredRestorationAndItsNotice() async throws {
+        let fixture = try makeFixture()
+        XCTAssertTrue(fixture.arm())
+        XCTAssertTrue(fixture.emit(.paste(isRepeat: false)))
+        try await waitUntil { fixture.sleep.contains(AssistedPasteFixture.imageDelay) }
+        fixture.writer.failWriteNumber = 2
+        XCTAssertFalse(fixture.emit(.pointerDown))
+        fixture.clipboard.clearContents()
+        XCTAssertTrue(fixture.clipboard.writeObjects([CaptureClipboardService.makeItem(for: fixture.capture)]))
+        XCTAssertTrue(fixture.arm())
+        let newChangeCount = fixture.clipboard.changeCount
+
+        fixture.sleep.resumeAll()
+        // Give the queued cleanup and old sequence both a chance to run.
+        for _ in 0..<5 { await Task.yield() }
+
+        XCTAssertTrue(fixture.service.isArmed)
+        XCTAssertTrue(fixture.results.isEmpty, "A superseded cleanup must not report over the newly armed shot.")
+        XCTAssertEqual(fixture.writer.writeCount, 1)
+        XCTAssertEqual(fixture.clipboard.changeCount, newChangeCount)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), fixture.capture.clipboardText)
+    }
+
+    @MainActor
     private func makeFixture() throws -> AssistedPasteFixture {
         let clipboard = NSPasteboard(name: .init("NotchShotAssistedPasteTests-\(UUID())"))
         let bitmap = try XCTUnwrap(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2,
@@ -480,6 +651,8 @@ private final class AssistedPasteFixture {
     let environment: AssistedPasteEnvironmentSpy
     let clock = AssistedPasteClock()
     let sleep = AssistedPasteSleepGate()
+    let writer = AssistedPasteClipboardWriter()
+    private(set) var results: [AssistedPasteResult] = []
     let service: AssistedPasteService
 
     init(capture: CaptureResult, clipboard: NSPasteboard) {
@@ -488,10 +661,13 @@ private final class AssistedPasteFixture {
         environment = AssistedPasteEnvironmentSpy(clipboard: clipboard)
         let sleep = self.sleep
         let clock = self.clock
+        let writer = self.writer
         service = AssistedPasteService(environment: environment,
                                        imageDelay: Self.imageDelay, restoreDelay: Self.restoreDelay,
                                        armTimeout: .seconds(120), sleep: { try await sleep.wait($0) },
-                                       now: { clock.now }, startPolling: false)
+                                       now: { clock.now }, startPolling: false,
+                                       writeClipboardItem: { writer.write($1, to: $0) })
+        service.onResult = { [weak self] in self?.results.append($0) }
     }
 
     func arm() -> Bool { service.arm(capture: capture, clipboard: clipboard) }
@@ -524,6 +700,24 @@ private final class AssistedPasteFixture {
             try await Task.sleep(for: .milliseconds(2))
         }
         XCTFail("Timed out waiting for a controlled assisted paste delay.")
+    }
+}
+
+@MainActor
+private final class AssistedPasteClipboardWriter {
+    var failWriteNumber: Int?
+    var replaceClipboardOnWriteNumber: Int?
+    private(set) var writeCount = 0
+
+    func write(_ item: NSPasteboardItem, to clipboard: NSPasteboard) -> Bool {
+        writeCount += 1
+        if writeCount == replaceClipboardOnWriteNumber {
+            clipboard.clearContents()
+            clipboard.setString("A newer clipboard owner won the write", forType: .string)
+            return false
+        }
+        guard writeCount != failWriteNumber else { return false }
+        return clipboard.writeObjects([item])
     }
 }
 

@@ -53,10 +53,11 @@ enum AccessibilityReader {
         return AccessibilityWindowSnapshot(element: window, title: title, bounds: bounds)
     }
 
-    static func read(window: AccessibilityWindowSnapshot) async -> AccessibilityReadResult {
-        await Task.detached(priority: .userInitiated) {
+    static func read(window: AccessibilityWindowSnapshot) async throws -> AccessibilityReadResult {
+        try await CaptureWorker.run {
             let traversal = Traversal()
             let root = traversal.visit(window.element, depth: 0)
+            try Task.checkCancellation()
             var result = AccessibilityReadResult(tree: root.map { [$0] } ?? [])
             result.text = readableText(result.tree)
             result.warnings = traversal.notes
@@ -64,7 +65,7 @@ enum AccessibilityReader {
                 result.warnings.append("The app did not expose a readable accessibility tree for the selected window. Try capturing again after its content finishes loading.")
             }
             return result
-        }.value
+        }
     }
 
     static func readableText(_ nodes: [AXNode]) -> String {
