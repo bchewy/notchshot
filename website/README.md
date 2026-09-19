@@ -1,7 +1,8 @@
 # NotchShot website
 
-A static landing page with the original demo video and the current 0.5.2 preview
-downloads. No dependencies or build step.
+A static landing page with the original demo video, prepared for the 0.6.0
+preview. No dependencies or build step. Publish the matching release assets
+before deploying this page; its new download links require those assets.
 
 ## Preview locally
 
@@ -19,10 +20,22 @@ Open <http://127.0.0.1:4175>.
 - `dist/assets/`: demo video and poster.
 - `dist/downloads/`: immutable preview app, corresponding source, and notices.
 
-The download ZIPs are intentionally checked in to preserve the complete static
-site. They are release snapshots, not the development source of truth. When
-publishing a new app build, update both the app and corresponding-source ZIPs,
-their names in the page, and their notices together.
+The page links to versioned assets on the [GitHub release](https://github.com/bchewy/notchshot/releases/tag/v0.6.0):
+
+- [NotchShot 0.6.0 app](https://github.com/bchewy/notchshot/releases/download/v0.6.0/NotchShot-0.6.0.zip)
+- [Corresponding source](https://github.com/bchewy/notchshot/releases/download/v0.6.0/NotchShot-0.6.0-source.zip)
+
+Check matching copies of both ZIPs into `dist/downloads/` when publishing, to
+preserve the complete static site. Until that step, this directory retains the
+earlier 0.5.2 snapshots. These are immutable releases, not the development source
+of truth. App and source archives must describe the same source revision; the
+copies on GitHub and in the static site must have matching checksums.
+
+When publishing an update, build and verify the app and corresponding-source
+ZIPs first. Publish both GitHub release assets, check their downloaded checksums,
+then update the page links, paired static copies, and notices together. Keep the
+preview and notarization information accurate. A source commit alone does not
+update the downloadable app.
 
 ## Vercel deployment
 

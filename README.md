@@ -28,7 +28,8 @@ by destination app.
 ## Build and run
 
 Requires **macOS 15+** and **Swift 6**. Building needs only the Xcode Command Line
-Tools. The downloadable 0.5.2 preview is built for Apple silicon and is not notarized.
+Tools. The 0.6.0 preview targets Apple silicon and is not notarized. See the
+[release notes](docs/releases/0.6.0.md) for changes and remaining verification limits.
 
 ```sh
 git clone https://github.com/bchewy/notchshot.git
