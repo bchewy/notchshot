@@ -197,7 +197,9 @@ final class CaptureStore {
     @ObservationIgnored private let landingPreviewDelay: Duration
     @ObservationIgnored private let shelfPreparationDelay: Duration
     @ObservationIgnored private let copyCollapseDelay: Duration
-    @ObservationIgnored private var copyCollapseTask: Task<Void, Never>?
+    @ObservationIgnored private let copyCollapseSchedule: NotchIdleTimer.Schedule
+    @ObservationIgnored private var cancelCopyCollapseDeadline: (() -> Void)?
+    @ObservationIgnored private var copyCollapseGeneration = 0
     private var isDraggingCard = false {
         didSet { cancelCopyCollapse() }
     }
@@ -228,6 +230,7 @@ final class CaptureStore {
          clipboard: NSPasteboard,
          copySound: (any CopySoundPlaying)? = nil,
          copyCollapseDelay: Duration = .milliseconds(180),
+         copyCollapseSchedule: @escaping NotchIdleTimer.Schedule = NotchIdleTimer.scheduleTask,
          assistedPaste: (any AssistedPasteServing)? = nil,
          idleSchedule: @escaping NotchIdleTimer.Schedule = NotchIdleTimer.scheduleTask,
          captureService: (any CaptureServing)? = nil) {
@@ -240,6 +243,7 @@ final class CaptureStore {
         self.landingPreviewDelay = landingPreviewDelay
         self.shelfPreparationDelay = shelfPreparationDelay
         self.copyCollapseDelay = copyCollapseDelay
+        self.copyCollapseSchedule = copyCollapseSchedule
         batchContextStyle = preferences.string(forKey: "batchContextStyle")
             .flatMap(BatchContextStyle.init(rawValue:)) ?? .compact
         theme = preferences.string(forKey: "notchTheme")
@@ -972,11 +976,11 @@ final class CaptureStore {
         playCopySound()
         cancelCopyCollapse()
         guard canCollapseAfterCopy else { return }
-        let delay = copyCollapseDelay
-        copyCollapseTask = Task { [weak self] in
-            do { try await Task.sleep(for: delay) } catch { return }
-            guard !Task.isCancelled, let self, self.canCollapseAfterCopy else { return }
-            self.copyCollapseTask = nil
+        let generation = copyCollapseGeneration
+        cancelCopyCollapseDeadline = copyCollapseSchedule(copyCollapseDelay) { [weak self] in
+            // Cancellation may race with a callback that is already queued.
+            guard let self, self.copyCollapseGeneration == generation, self.canCollapseAfterCopy else { return }
+            self.cancelCopyCollapseDeadline = nil
             // Reuse the interruptible native spring and Reduce Motion handling.
             self.collapse()
         }
@@ -984,8 +988,9 @@ final class CaptureStore {
 
     /// Explicit navigation inside a detail page also owns the next interaction.
     func cancelCopyCollapse() {
-        copyCollapseTask?.cancel()
-        copyCollapseTask = nil
+        copyCollapseGeneration &+= 1
+        cancelCopyCollapseDeadline?()
+        cancelCopyCollapseDeadline = nil
         refreshAutoCollapse(restart: true)
     }
 
