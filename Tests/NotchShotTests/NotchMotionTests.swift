@@ -10,15 +10,17 @@ final class NotchMotionTests: XCTestCase {
         guard NotchGeometry.preferredScreen != nil else {
             throw XCTSkip("This native integration test requires WindowServer display access; the test process is headless or sandboxed.")
         }
-        try XCTSkipIf(TestEnvironment.isContinuousIntegration,
-                      "Fails on the GitHub macOS runner with a runtime InvalidTransition error; runs locally under Xcode. Tracked in https://github.com/bchewy/notchshot/issues/2")
         let previousWindows = Set(NSApp.windows.map(ObjectIdentifier.init))
         let (preferences, clipboard) = isolatedStoreDependencies()
         let store = CaptureStore(preferences: preferences, clipboard: clipboard)
         let controller = NotchPanelController(store: store)
         defer { store.stop() }
         let window = try XCTUnwrap(NSApp.windows.first { !previousWindows.contains(ObjectIdentifier($0)) && $0.title == "NotchShot" })
-        defer { window.close() }
+        defer {
+            checkpoint("closing window")
+            window.close()
+            checkpoint("closed window")
+        }
         XCTAssertFalse(store.isExpanded)
         XCTAssertEqual(controller.presentation.progress, 0)
         XCTAssertEqual(window.frame.height, max(store.notchHeight, 32), accuracy: 0.5)
@@ -26,23 +28,30 @@ final class NotchMotionTests: XCTestCase {
                        "The native window must release the old side padding, not only draw smaller indicators.")
         let anchor = window.frame
 
+        checkpoint("opening")
         store.isExpanded = true
         try await waitForMotion { !controller.isAnimating && controller.presentation.progress == 1 }
+        checkpoint("opened")
         XCTAssertEqual(window.frame.height, 180, accuracy: 0.5)
 
         // Page changes must animate independently when reveal progress is
         // already one; changing the interpolation endpoint would jump here.
+        checkpoint("mounting settings")
         store.page = .settings
         try await waitForMotion { controller.isAnimating && window.frame.height > 180 }
+        checkpoint("settings intermediate frame")
         XCTAssertLessThan(window.frame.height, 440)
         XCTAssertEqual(controller.presentation.progress, 1)
         XCTAssertEqual(window.frame.size, controller.presentation.size)
         try await waitForMotion { !controller.isAnimating && abs(window.frame.height - 440) < 0.5 }
 
+        checkpoint("settings settled, switching to detail")
         store.page = .detail
         try await waitForMotion { !controller.isAnimating && abs(window.frame.height - 480) < 0.5 }
+        checkpoint("detail settled, switching to shelf")
         store.page = .shelf
         try await waitForMotion { !controller.isAnimating && abs(window.frame.height - 180) < 0.5 }
+        checkpoint("shelf settled")
         XCTAssertEqual(window.frame.midX, anchor.midX, accuracy: 0.5)
         XCTAssertEqual(window.frame.maxY, anchor.maxY, accuracy: 0.5)
         XCTAssertFalse(window.isVisible, "The regression test must not present UI.")
@@ -89,11 +98,20 @@ final class NotchMotionTests: XCTestCase {
         XCTAssertFalse(window.isVisible)
     }
 
+    private func checkpoint(_ phase: String) {
+        FileHandle.standardError.write(Data("[NativeMotion] \(phase)\n".utf8))
+    }
+
     @MainActor
     private func waitForMotion(_ condition: @MainActor () -> Bool) async throws {
         for _ in 0..<100 {
             if condition() { return }
-            try await Task.sleep(for: .milliseconds(10))
+            do {
+                try await Task.sleep(for: .milliseconds(10))
+            } catch {
+                checkpoint("sleep threw \(String(reflecting: type(of: error))): \(error) domain=\((error as NSError).domain)")
+                throw error
+            }
         }
         throw NSError(domain: "NotchMotionTests", code: 1,
                       userInfo: [NSLocalizedDescriptionKey: "The store change did not drive native panel motion within one second."])
