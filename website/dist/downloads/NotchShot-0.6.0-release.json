@@ -1,0 +1,17 @@
+{
+  "artifacts": {
+    "NotchShot-0.6.0-source.zip": "2c4a96afb0942c0aefb64f9f380bb12929a2dd95d3f8e0acae5141448e4f693e",
+    "NotchShot-0.6.0.zip": "9489e731affeda932938b169d802a782f50dcc1287f667f11bf3ded8d33aaceb"
+  },
+  "build": "29",
+  "bundle_identifier": "com.bchewy.NotchShot",
+  "certificate_validation": "security verify-cert -p codeSign -R ocsp -R require",
+  "channel": "Preview",
+  "executable_sha256": "24f8ae69251d3a1f9cdbb2919ce293aceacdb8f3664b21fbad421659c6e1c03d",
+  "notarization": "not_checked",
+  "signature": "certificate-backed",
+  "signature_validation": "codesign --verify --deep --strict",
+  "source_dirty": false,
+  "source_revision": "5fd8876c4e9dbc1eaba4b4dd215965db6b5f6f77",
+  "version": "0.6.0"
+}

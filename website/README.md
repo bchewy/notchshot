@@ -1,8 +1,8 @@
 # NotchShot website
 
-A static landing page with the original demo video and the published 0.5.2
-preview downloads. No dependencies or build step. The app source is preparing
-0.6.0; merging source changes does not replace the downloadable app.
+A static landing page with the original demo video and the 0.6.0 preview
+downloads. No dependencies or build step. A source update alone does not replace
+the downloadable app; each preview is packaged and verified separately.
 
 ## Preview locally
 
@@ -20,24 +20,37 @@ Open <http://127.0.0.1:4175>.
 - `dist/assets/`: demo video and poster.
 - `dist/downloads/`: immutable preview app, corresponding source, and notices.
 
-The page links to the paired, checked-in release snapshots:
+The checked-in release files are:
 
-- `dist/downloads/NotchShot-0.5.2.zip`
-- `dist/downloads/NotchShot-0.5.2-source.zip`
+- `dist/downloads/NotchShot-0.6.0.zip`
+- `dist/downloads/NotchShot-0.6.0-source.zip`
+- `dist/downloads/NotchShot-0.6.0-SHA256SUMS.txt`
+- `dist/downloads/NotchShot-0.6.0-release.json`
+
+Preview 0.6.0 (build 29) was built from source commit
+`5fd8876c4e9dbc1eaba4b4dd215965db6b5f6f77`. The source ZIP records that same
+revision in `SOURCE_REVISION` and `BUILD_METADATA.json`. The release JSON records
+the executable hash and paired archive hashes. The matching assets are available
+on [GitHub Releases](https://github.com/bchewy/notchshot/releases/tag/v0.6.0).
 
 These are immutable releases, not the development source of truth. Keep their
 links and the page's version/features aligned with the published app until the
-next release is signed and verified. For 0.6.0, follow [the release procedure](../docs/RELEASING.md)
-to publish versioned assets on GitHub, then add matching copies to
-`dist/downloads/` and update the page. App and source archives must describe the
-same source revision; copies on GitHub and the static site must have matching
-checksums.
+next release is signed and verified. The original 0.5.2 downloads remain intact.
+App and source archives must describe the same source revision; copies on GitHub
+and the static site must have matching checksums. To verify the local pair:
 
-When publishing an update, build and verify the app and corresponding-source
-ZIPs first. Publish both GitHub release assets, check their downloaded checksums,
-then update the page links, paired static copies, and notices together. Keep the
-preview and notarization information accurate. A source commit alone does not
-update the downloadable app.
+```sh
+cd website/dist/downloads
+shasum -a 256 -c NotchShot-0.6.0-SHA256SUMS.txt
+```
+
+When publishing an update, follow [the release procedure](../docs/RELEASING.md)
+to build and verify the app and corresponding-source ZIPs first. Publish both
+GitHub release assets with their checksum file and release metadata, check their
+downloaded checksums, then update the page links, paired static copies, and
+notices together. After deploying, verify the downloads served by notchshot.com
+against those same checksums. Keep the preview and notarization information
+accurate; 0.6.0 is a certificate-signed preview and is not notarized.
 
 ## Vercel deployment
 
