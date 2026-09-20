@@ -17,6 +17,8 @@ final class NotchPanelController {
     private let mouseLocation: @MainActor () -> CGPoint
     private let pressedMouseButtons: @MainActor () -> Int
     private let clock: @MainActor () -> TimeInterval
+    private let motionClock: @MainActor () -> TimeInterval
+    private let shouldReduceMotion: @MainActor () -> Bool
     private var screenFollowPolicy = NotchScreenFollowPolicy()
     private var screenFollowTimer: Timer?
     private var workspaceObservers: [NSObjectProtocol] = []
@@ -42,19 +44,25 @@ final class NotchPanelController {
          },
          mouseLocation: @escaping @MainActor () -> CGPoint = { NSEvent.mouseLocation },
          pressedMouseButtons: @escaping @MainActor () -> Int = { NSEvent.pressedMouseButtons },
-         clock: @escaping @MainActor () -> TimeInterval = { CACurrentMediaTime() }) {
+         clock: @escaping @MainActor () -> TimeInterval = { CACurrentMediaTime() },
+         motionClock: @escaping @MainActor () -> TimeInterval = { CACurrentMediaTime() },
+         shouldReduceMotion: @escaping @MainActor () -> Bool = {
+             NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+         }) {
         self.store = store
         self.displays = displays
         self.preferredDisplayID = preferredDisplayID
         self.mouseLocation = mouseLocation
         self.pressedMouseButtons = pressedMouseButtons
         self.clock = clock
+        self.motionClock = motionClock
+        self.shouldReduceMotion = shouldReduceMotion
         panel = NotchPanel(frame: .zero)
         let progress: CGFloat = store.isExpanded ? 1 : 0
         collapsedSize = NotchStyle.collapsedSize(notchSize: CGSize(width: store.notchWidth, height: store.notchHeight))
         let size = store.isExpanded ? NotchStyle.expandedSize(for: store.page) : collapsedSize
         presentation = NotchPresentation(progress: progress, size: size)
-        let now = CACurrentMediaTime()
+        let now = motionClock()
         motion = NotchMotion(progress: progress, at: now)
         sizeMotion = NotchSizeMotion(size: size, minimum: collapsedSize,
                                     maximum: Self.maximumSize(for: collapsedSize), at: now)
@@ -87,8 +95,8 @@ final class NotchPanelController {
         }
         reduceMotionObserver = workspaceNotifications.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
-                guard NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else { return }
-                self?.resynchronize(reason: "reduce-motion")
+                guard let self, self.shouldReduceMotion() else { return }
+                self.resynchronize(reason: "reduce-motion")
             }
         }
         for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification] {
@@ -196,7 +204,7 @@ final class NotchPanelController {
         }
         if currentDisplay != target {
             let changesScreen = currentDisplay?.id != target.id
-            let fade = changesScreen && panel.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            let fade = changesScreen && panel.isVisible && !shouldReduceMotion()
             currentDisplay = target
             if fade { panel.alphaValue = 0 }
             // Re-anchor the same panel without sweeping across desktop content.
@@ -272,8 +280,8 @@ final class NotchPanelController {
             refreshScreenPlacement()
             return
         }
-        let now = CACurrentMediaTime()
-        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let now = motionClock()
+        let reduceMotion = shouldReduceMotion()
         let sample = motion.retarget(to: store.isExpanded ? 1 : 0, at: now,
                                      reduceMotion: reduceMotion)
         let sizeSample = sizeMotion.retarget(to: targetSize, at: now, reduceMotion: reduceMotion)
@@ -284,7 +292,7 @@ final class NotchPanelController {
     private func resynchronize(reason: String) {
         stopDisplayLink()
         guard configureGeometry() else { return }
-        let now = CACurrentMediaTime()
+        let now = motionClock()
         motion.reset(to: store.isExpanded ? 1 : 0, at: now)
         sizeMotion = NotchSizeMotion(size: targetSize, minimum: collapsedSize,
                                     maximum: Self.maximumSize(for: collapsedSize), at: now)
@@ -308,7 +316,7 @@ final class NotchPanelController {
             guard let self else { link.invalidate(); return }
             // Direct native window updates render now. Sampling a future
             // targetTimestamp here could rewind at the next input's real time.
-            let timestamp = CACurrentMediaTime()
+            let timestamp = self.motionClock()
             self.apply(self.motion.sample(at: timestamp), sizeSample: self.sizeMotion.sample(at: timestamp),
                        at: timestamp, reason: "tick")
         }

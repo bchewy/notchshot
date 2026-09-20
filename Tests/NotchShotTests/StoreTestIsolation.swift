@@ -17,8 +17,3 @@ extension XCTestCase {
         return (preferences, clipboard)
     }
 }
-
-enum TestEnvironment {
-    /// GitHub Actions sets CI=true. A few native panel checks only run locally.
-    static var isContinuousIntegration: Bool { ProcessInfo.processInfo.environment["CI"] == "true" }
-}
