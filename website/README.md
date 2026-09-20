@@ -1,8 +1,8 @@
 # NotchShot website
 
-A static landing page with the original demo video and the 0.6.0 preview
-downloads. No dependencies or build step. A source update alone does not replace
-the downloadable app; each preview is packaged and verified separately.
+A static landing page with a scroll-driven capture walkthrough, the original
+demo video, and the 0.6.0 preview downloads. No dependencies or build step.
+A source update alone does not replace the downloadable app; each preview is packaged and verified separately.
 
 ## Preview locally
 
@@ -16,7 +16,7 @@ Open <http://127.0.0.1:4175>.
 
 ## Contents
 
-- `dist/index.html` and `dist/style.css`: page source.
+- `dist/index.html`, `dist/style.css`, and `dist/story.js`: page source.
 - `dist/assets/`: demo video and poster.
 - `dist/downloads/`: immutable preview app, corresponding source, and notices.
 
@@ -51,6 +51,22 @@ downloaded checksums, then update the page links, paired static copies, and
 notices together. After deploying, verify the downloads served by notchshot.com
 against those same checksums. Keep the preview and notarization information
 accurate; 0.6.0 is a certificate-signed preview and is not notarized.
+
+## Scroll walkthrough
+
+The illustrative Notes window shrinks to a screenshot card and follows a curved
+path into the notch shelf. Native scrolling controls the reversible sequence;
+the three step buttons provide keyboard-accessible shortcuts. The real recording
+remains below the illustration and loads only when played.
+
+`prefers-reduced-motion` switches to a compact static shelf. Without JavaScript,
+the static shelf, explanation, video, and downloads remain available. No animation
+library, scroll interception, external fonts, or runtime dependencies are used.
+
+For visual changes, check the capture, floating-card, and landing states on desktop
+and mobile; scroll backward; exercise the step buttons and skip link; and verify
+reduced motion and JavaScript-disabled rendering. Keep the download archives
+unchanged for website-only updates.
 
 ## Vercel deployment
 
