@@ -28,8 +28,9 @@ by destination app.
 ## Build and run
 
 Requires **macOS 15+** and **Swift 6**. Building needs only the Xcode Command Line
-Tools. This source prepares 0.6.0; the website still offers the published 0.5.2
-preview. Both target Apple silicon and are not notarized. See the
+Tools. Download the **0.6.0 preview** from [notchshot.com](https://notchshot.com)
+or [GitHub Releases](https://github.com/bchewy/notchshot/releases/tag/v0.6.0).
+It targets Apple silicon and is not notarized. See the
 [release notes](docs/releases/0.6.0.md) for changes and remaining verification limits.
 
 ```sh
@@ -61,7 +62,7 @@ Command Line Tools alone can build the app but cannot compile the test target.
 GitHub Actions runs the build and the suite on every push and pull request
 (`.github/workflows/tests.yml`).
 
-The current suite has **377 tests**, covering the capture entry path, capture
+The current suite has **378 tests**, covering the capture entry path, capture
 formatting, clipboard preparation, selection, shortcuts, shelf motion, and
 auto-collapse, plus theme preferences and display following.
 See [verification notes](docs/VERIFICATION.md) for the historical checks and
