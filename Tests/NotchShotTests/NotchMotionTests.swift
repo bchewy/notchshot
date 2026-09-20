@@ -38,7 +38,12 @@ final class NotchMotionTests: XCTestCase {
         // already one; changing the interpolation endpoint would jump here.
         checkpoint("mounting settings")
         store.page = .settings
-        try await waitForMotion { controller.isAnimating && window.frame.height > 180 }
+        do {
+            try await waitForMotion { controller.isAnimating && window.frame.height > 180 }
+        } catch {
+            checkpoint("settings wait threw \(String(reflecting: type(of: error))): \(error) domain=\((error as NSError).domain); animating=\(controller.isAnimating) frame=\(window.frame) presentation=\(controller.presentation.size)")
+            throw error
+        }
         checkpoint("settings intermediate frame")
         XCTAssertLessThan(window.frame.height, 440)
         XCTAssertEqual(controller.presentation.progress, 1)
@@ -113,6 +118,7 @@ final class NotchMotionTests: XCTestCase {
                 throw error
             }
         }
+        checkpoint("waitForMotion exhausted its polling deadline")
         throw NSError(domain: "NotchMotionTests", code: 1,
                       userInfo: [NSLocalizedDescriptionKey: "The store change did not drive native panel motion within one second."])
     }
