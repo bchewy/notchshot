@@ -40,7 +40,10 @@ jobs:
         run: |
           executed=$(grep -Eo "Executed [0-9]+ tests" test-output.log | tail -1 | grep -Eo "[0-9]+" || true)
           echo "Executed ${executed:-0} tests"
-          grep -E "' skipped \(" test-output.log || true
+          if grep -E "' skipped \(" test-output.log; then
+            echo "::error::The macOS runner must execute the full suite, including native panel tests."
+            exit 1
+          fi
           if [ "${executed:-0}" -lt 290 ]; then
             echo "::error::Expected at least 290 tests to run; saw ${executed:-0}."
             exit 1

@@ -13,14 +13,17 @@ final class NotchMotionTests: XCTestCase {
         let previousWindows = Set(NSApp.windows.map(ObjectIdentifier.init))
         let (preferences, clipboard) = isolatedStoreDependencies()
         let store = CaptureStore(preferences: preferences, clipboard: clipboard)
-        let controller = NotchPanelController(store: store)
+        // Keep animation time independent of expensive native view mounting.
+        // Observation, the real display link, and the real hosting view still
+        // deliver every frame; only the time sampled by that link is controlled.
+        // Exercise animation even when the host enables Reduce Motion; the
+        // separate reduced-motion test covers snapping without changing macOS.
+        var motionTime: TimeInterval = 0
+        let controller = NotchPanelController(store: store, motionClock: { motionTime },
+                                              shouldReduceMotion: { false })
         defer { store.stop() }
         let window = try XCTUnwrap(NSApp.windows.first { !previousWindows.contains(ObjectIdentifier($0)) && $0.title == "NotchShot" })
-        defer {
-            checkpoint("closing window")
-            window.close()
-            checkpoint("closed window")
-        }
+        defer { window.close() }
         XCTAssertFalse(store.isExpanded)
         XCTAssertEqual(controller.presentation.progress, 0)
         XCTAssertEqual(window.frame.height, max(store.notchHeight, 32), accuracy: 0.5)
@@ -28,38 +31,96 @@ final class NotchMotionTests: XCTestCase {
                        "The native window must release the old side padding, not only draw smaller indicators.")
         let anchor = window.frame
 
-        checkpoint("opening")
         store.isExpanded = true
-        try await waitForMotion { !controller.isAnimating && controller.presentation.progress == 1 }
-        checkpoint("opened")
+        try await waitForMotion("opening starts a display link") { controller.isAnimating }
+        motionTime += 1
+        try await waitForMotion("opening settles") { !controller.isAnimating && controller.presentation.progress == 1 }
         XCTAssertEqual(window.frame.height, 180, accuracy: 0.5)
 
         // Page changes must animate independently when reveal progress is
         // already one; changing the interpolation endpoint would jump here.
-        checkpoint("mounting settings")
         store.page = .settings
-        do {
-            try await waitForMotion { controller.isAnimating && window.frame.height > 180 }
-        } catch {
-            checkpoint("settings wait threw \(String(reflecting: type(of: error))): \(error) domain=\((error as NSError).domain); animating=\(controller.isAnimating) frame=\(window.frame) presentation=\(controller.presentation.size)")
-            throw error
+        try await waitForMotion("settings starts a display link") { controller.isAnimating }
+        motionTime += 0.08
+        try await waitForMotion("settings receives an intermediate native frame") {
+            controller.isAnimating && window.frame.height > 180
         }
-        checkpoint("settings intermediate frame")
         XCTAssertLessThan(window.frame.height, 440)
         XCTAssertEqual(controller.presentation.progress, 1)
         XCTAssertEqual(window.frame.size, controller.presentation.size)
-        try await waitForMotion { !controller.isAnimating && abs(window.frame.height - 440) < 0.5 }
+        XCTAssertEqual(window.frame.midX, anchor.midX, accuracy: 0.5)
+        XCTAssertEqual(window.frame.maxY, anchor.maxY, accuracy: 0.5)
+        XCTAssertFalse(window.isVisible)
+        motionTime += 1
+        try await waitForMotion("settings settles at 440 points") { !controller.isAnimating && abs(window.frame.height - 440) < 0.5 }
 
-        checkpoint("settings settled, switching to detail")
         store.page = .detail
-        try await waitForMotion { !controller.isAnimating && abs(window.frame.height - 480) < 0.5 }
-        checkpoint("detail settled, switching to shelf")
+        try await waitForMotion("detail starts a display link") { controller.isAnimating }
+        motionTime += 1
+        try await waitForMotion("detail settles at 480 points") { !controller.isAnimating && abs(window.frame.height - 480) < 0.5 }
         store.page = .shelf
-        try await waitForMotion { !controller.isAnimating && abs(window.frame.height - 180) < 0.5 }
-        checkpoint("shelf settled")
+        try await waitForMotion("shelf starts a display link") { controller.isAnimating }
+        motionTime += 1
+        try await waitForMotion("shelf settles at 180 points") { !controller.isAnimating && abs(window.frame.height - 180) < 0.5 }
         XCTAssertEqual(window.frame.midX, anchor.midX, accuracy: 0.5)
         XCTAssertEqual(window.frame.maxY, anchor.maxY, accuracy: 0.5)
         XCTAssertFalse(window.isVisible, "The regression test must not present UI.")
+    }
+
+    @MainActor
+    func testReducedMotionSnapsHiddenNativePanelAcrossOpenPagesAndCollapse() async throws {
+        _ = NSApplication.shared
+        guard NotchGeometry.preferredScreen != nil else {
+            throw XCTSkip("This native integration test requires WindowServer display access; the test process is headless or sandboxed.")
+        }
+        let previousWindows = Set(NSApp.windows.map(ObjectIdentifier.init))
+        let (preferences, clipboard) = isolatedStoreDependencies()
+        let store = CaptureStore(preferences: preferences, clipboard: clipboard)
+        // Frozen time proves each change snaps; an ordinary animation cannot
+        // run to its endpoint and accidentally satisfy the reduced-motion test.
+        let controller = NotchPanelController(store: store, motionClock: { 0 },
+                                              shouldReduceMotion: { true })
+        defer { store.stop() }
+        let window = try XCTUnwrap(NSApp.windows.first {
+            !previousWindows.contains(ObjectIdentifier($0)) && $0.title == "NotchShot"
+        })
+        defer { window.close() }
+        let collapsedFrame = window.frame
+
+        store.isExpanded = true
+        try await waitForMotion("reduced-motion opening snaps to the shelf") {
+            controller.presentation.progress == 1 && abs(window.frame.height - 180) < 0.5
+        }
+        assertReducedMotionFrame(window, controller: controller, height: 180, anchor: collapsedFrame)
+
+        store.page = .settings
+        try await waitForMotion("reduced-motion settings snaps to 440 points") { abs(window.frame.height - 440) < 0.5 }
+        assertReducedMotionFrame(window, controller: controller, height: 440, anchor: collapsedFrame)
+
+        store.page = .detail
+        try await waitForMotion("reduced-motion detail snaps to 480 points") { abs(window.frame.height - 480) < 0.5 }
+        assertReducedMotionFrame(window, controller: controller, height: 480, anchor: collapsedFrame)
+
+        store.page = .shelf
+        try await waitForMotion("reduced-motion shelf snaps to 180 points") { abs(window.frame.height - 180) < 0.5 }
+        assertReducedMotionFrame(window, controller: controller, height: 180, anchor: collapsedFrame)
+
+        store.isExpanded = false
+        try await waitForMotion("reduced-motion collapse snaps to compact bounds") { controller.presentation.progress == 0 }
+        assertReducedMotionFrame(window, controller: controller, height: collapsedFrame.height, anchor: collapsedFrame)
+        XCTAssertEqual(window.frame.size, collapsedFrame.size)
+    }
+
+    @MainActor
+    private func assertReducedMotionFrame(_ window: NSWindow, controller: NotchPanelController,
+                                          height: CGFloat, anchor: CGRect,
+                                          file: StaticString = #filePath, line: UInt = #line) {
+        XCTAssertFalse(controller.isAnimating, "Reduce Motion must not start a display link.", file: file, line: line)
+        XCTAssertEqual(window.frame.height, height, accuracy: 0.5, file: file, line: line)
+        XCTAssertEqual(window.frame.size, controller.presentation.size, file: file, line: line)
+        XCTAssertEqual(window.frame.midX, anchor.midX, accuracy: 0.5, file: file, line: line)
+        XCTAssertEqual(window.frame.maxY, anchor.maxY, accuracy: 0.5, file: file, line: line)
+        XCTAssertFalse(window.isVisible, "The regression test must not present UI.", file: file, line: line)
     }
 
     @MainActor
@@ -83,13 +144,13 @@ final class NotchMotionTests: XCTestCase {
         store.isExpanded = false
         // A first display tick can move by less than AppKit's pixel rounding.
         // Wait for visible native motion before asserting the smaller frame.
-        try await waitForMotion { controller.presentation.progress < 1 && window.frame.height < expandedFrame.height }
+        try await waitForMotion("collapse receives a smaller native frame") { controller.presentation.progress < 1 && window.frame.height < expandedFrame.height }
         XCTAssertLessThan(window.frame.height, expandedFrame.height)
         XCTAssertEqual(window.frame.size, controller.presentation.size)
         XCTAssertEqual(window.frame.midX, expandedFrame.midX, accuracy: 0.5)
         XCTAssertEqual(window.frame.maxY, expandedFrame.maxY, accuracy: 0.5)
 
-        try await waitForMotion { !controller.isAnimating && controller.presentation.progress == 0 }
+        try await waitForMotion("collapse settles") { !controller.isAnimating && controller.presentation.progress == 0 }
         XCTAssertEqual(window.frame.height, max(store.notchHeight, 32), accuracy: 0.5)
         XCTAssertEqual(window.frame.width, store.notchWidth + 36, accuracy: 0.5,
                        "A settled close must not retain an invisible expanded hit area.")
@@ -97,30 +158,22 @@ final class NotchMotionTests: XCTestCase {
 
         // A second change verifies the one-shot observation was re-armed.
         store.isExpanded = true
-        try await waitForMotion { controller.presentation.progress > 0 }
-        try await waitForMotion { !controller.isAnimating && controller.presentation.progress == 1 }
+        try await waitForMotion("reopening receives a native frame") { controller.presentation.progress > 0 }
+        try await waitForMotion("reopening settles") { !controller.isAnimating && controller.presentation.progress == 1 }
         XCTAssertEqual(window.frame.size, expandedFrame.size)
         XCTAssertFalse(window.isVisible)
     }
 
-    private func checkpoint(_ phase: String) {
-        FileHandle.standardError.write(Data("[NativeMotion] \(phase)\n".utf8))
-    }
-
     @MainActor
-    private func waitForMotion(_ condition: @MainActor () -> Bool) async throws {
+    private func waitForMotion(_ description: String, _ condition: @MainActor () -> Bool) async throws {
         for _ in 0..<100 {
             if condition() { return }
-            do {
-                try await Task.sleep(for: .milliseconds(10))
-            } catch {
-                checkpoint("sleep threw \(String(reflecting: type(of: error))): \(error) domain=\((error as NSError).domain)")
-                throw error
-            }
+            try await Task.sleep(for: .milliseconds(10))
         }
-        checkpoint("waitForMotion exhausted its polling deadline")
+        let message = "Timed out waiting for \(description). System Reduce Motion: \(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)."
+        FileHandle.standardError.write(Data("[NativeMotion] \(message)\n".utf8))
         throw NSError(domain: "NotchMotionTests", code: 1,
-                      userInfo: [NSLocalizedDescriptionKey: "The store change did not drive native panel motion within one second."])
+                      userInfo: [NSLocalizedDescriptionKey: message])
     }
 
     func testOpeningAndClosingHaveBoundedIntermediateFramesAndExactEndpoints() {
