@@ -7,7 +7,7 @@ case "$MODE" in run|--build-only|--stage-only|--verify|--debug|--logs|--telemetr
 APP_NAME="NotchShot"
 BUNDLE_ID="com.bchewy.NotchShot"
 # Stable tags must match this version (docs/RELEASING.md).
-APP_VERSION="0.7.0"
+APP_VERSION="0.8.0"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_BUNDLE="$PROJECT_ROOT/outputs/$APP_NAME.app"
 STAGED_APP="$PROJECT_ROOT/work/staged/$APP_NAME.app"
