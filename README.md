@@ -64,6 +64,13 @@ swift test --disable-sandbox
 bash -n script/build_and_run.sh
 ```
 
+The app icon is drawn in code. After changing `script/make_app_icon.swift`,
+regenerate `Sources/NotchShot/Resources/AppIcon.icns` with:
+
+```sh
+swift script/make_app_icon.swift
+```
+
 Running the tests needs full Xcode, because XCTest ships only with Xcode. The
 Command Line Tools alone can build the app but cannot compile the test target.
 GitHub Actions runs the build and the suite on every push and pull request

@@ -136,14 +136,14 @@ cp "$PROJECT_ROOT/LICENSING.md" "$STAGED_APP/Contents/Resources/LICENSING.md"
 cp "$PROJECT_ROOT/THIRD_PARTY_NOTICES.md" "$STAGED_APP/Contents/Resources/THIRD_PARTY_NOTICES.md"
 cp "$PROJECT_ROOT"/Sources/NotchShot/Resources/*.wav "$STAGED_APP/Contents/Resources/"
 cp "$PROJECT_ROOT"/Sources/NotchShot/Resources/Camera*.png "$STAGED_APP/Contents/Resources/"
-if [[ "$MODE" != --stage-only && -f "$PROJECT_ROOT/work/AppIcon.icns" ]]; then
-  cp "$PROJECT_ROOT/work/AppIcon.icns" "$STAGED_APP/Contents/Resources/AppIcon.icns"
-fi
+# Regenerate with: swift script/make_app_icon.swift
+cp "$PROJECT_ROOT/Sources/NotchShot/Resources/AppIcon.icns" "$STAGED_APP/Contents/Resources/AppIcon.icns"
 cat > "$STAGED_APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>CFBundleExecutable</key><string>$APP_NAME</string>
+<key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundleIdentifier</key><string>$BUNDLE_ID</string>
 <key>CFBundleName</key><string>$APP_NAME</string>
 <key>CFBundleDisplayName</key><string>$APP_NAME</string>
@@ -161,9 +161,6 @@ PLIST
 /usr/bin/plutil -insert NotchShotBuildChannel -string "$BUILD_CHANNEL" "$STAGED_APP/Contents/Info.plist"
 /usr/bin/plutil -insert NotchShotSourceRevision -string "$SOURCE_REVISION" "$STAGED_APP/Contents/Info.plist"
 /usr/bin/plutil -insert NotchShotSourceDirty -bool "$SOURCE_DIRTY" "$STAGED_APP/Contents/Info.plist"
-if [[ -f "$STAGED_APP/Contents/Resources/AppIcon.icns" ]]; then
-  /usr/bin/plutil -insert CFBundleIconFile -string AppIcon "$STAGED_APP/Contents/Info.plist"
-fi
 
 # Reuse a development identity when available so macOS sees updates as the same
 # app. The cached value is a public certificate fingerprint, never a private key.
