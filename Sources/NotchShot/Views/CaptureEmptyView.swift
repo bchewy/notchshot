@@ -59,6 +59,9 @@ struct CaptureEmptyView: View {
                                 .accessibilityHidden(true)
                         }
                     }
+                    if let history = store.history {
+                        HistorySettingsView(history: history)
+                    }
                     if let updates {
                         UpdateSettingsView(updates: updates)
                     }

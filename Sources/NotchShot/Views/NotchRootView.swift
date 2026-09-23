@@ -118,12 +118,25 @@ struct NotchRootView: View {
                     ShotShelfView(store: store)
                     Spacer(minLength: 0)
                 }
+            case .history:
+                if let history = store.history {
+                    HistoryView(store: store, history: history)
+                }
             }
         }
         .padding(.horizontal, 14)
         .padding(.top, 6)
         .padding(.bottom, 16)
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private var title: String {
+        switch store.page {
+        case .shelf: "NotchShot"
+        case .settings: "Settings"
+        case .detail: "Shot details"
+        case .history: "History"
+        }
     }
 
     private var header: some View {
@@ -134,7 +147,7 @@ struct NotchRootView: View {
                     .accessibilityLabel("Back to shot shelf")
                     .help("Back to shot shelf")
             }
-            Text(store.page == .settings ? "Settings" : store.page == .detail ? "Shot details" : "NotchShot")
+            Text(title)
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .tracking(-0.3)
             Spacer(minLength: 8)
@@ -143,8 +156,14 @@ struct NotchRootView: View {
                 Button(action: store.clearHistory) { Image(systemName: "trash") }
                     .buttonStyle(NotchIconButtonStyle())
                     .accessibilityLabel("Clear shot shelf")
-                    .accessibilityHint("Removes all saved and incoming shots. Copied content stays on your clipboard.")
+                    .accessibilityHint("Removes every shot from the shelf, including incoming ones. Copied content and saved history stay.")
                     .help("Clear all shots from the shelf")
+            }
+            if store.page == .shelf, store.history?.isEnabled == true {
+                Button(action: store.showHistory) { Image(systemName: "clock.arrow.circlepath") }
+                    .buttonStyle(NotchIconButtonStyle())
+                    .accessibilityLabel("Shot history")
+                    .help("Search and reopen saved shots")
             }
             if store.page != .settings {
                 Button(action: store.showCaptureSettings) { Image(systemName: "slider.horizontal.3") }

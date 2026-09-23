@@ -138,6 +138,7 @@ final class CaptureStore {
             shelfSelection.reconcile(orderedIDs: captures.map(\.id))
             rebuildSelectedBatch()
             cancelCopyCollapse()
+            history?.rememberShelf(captures.map(\.id))
         }
     }
     private var shelfSelection = ShelfSelection()
@@ -168,6 +169,8 @@ final class CaptureStore {
     var notchHeight: CGFloat = 32
     var notchWidth: CGFloat = 190
     @ObservationIgnored private let preferences: UserDefaults
+    /// Opt-in saved shots. Nil in tests that do not exercise history.
+    @ObservationIgnored let history: ShotHistory?
     @ObservationIgnored private let captureSound: any CaptureSoundPlaying
     @ObservationIgnored private let copySound: any CopySoundPlaying
     @ObservationIgnored private let clipboard: NSPasteboard
@@ -233,8 +236,10 @@ final class CaptureStore {
          copyCollapseSchedule: @escaping NotchIdleTimer.Schedule = NotchIdleTimer.scheduleTask,
          assistedPaste: (any AssistedPasteServing)? = nil,
          idleSchedule: @escaping NotchIdleTimer.Schedule = NotchIdleTimer.scheduleTask,
-         captureService: (any CaptureServing)? = nil) {
+         captureService: (any CaptureServing)? = nil,
+         history: ShotHistory? = nil) {
         self.preferences = preferences
+        self.history = history
         self.captureService = captureService ?? CaptureService()
         self.captureSound = captureSound ?? CaptureSoundService()
         self.clipboard = clipboard
@@ -275,6 +280,12 @@ final class CaptureStore {
         idleTimer = NotchIdleTimer(schedule: idleSchedule,
                                    refreshAttention: { [weak self] in self?.onRefreshNotchAttention?() },
                                    collapse: { [weak self] in self?.collapse() })
+        history?.onEnabled = { [weak self] in
+            guard let self, let history = self.history else { return }
+            // Shots already on the shelf join history when it is turned on.
+            self.captures.forEach(history.record)
+            history.rememberShelf(self.captures.map(\.id))
+        }
         self.assistedPaste.onResult = { [weak self] result in
             switch result {
             case .eventsSent: break
@@ -325,10 +336,12 @@ final class CaptureStore {
             || isRecordingShortcut || isPresentingExport || pendingCapture != nil || isPreparingBatch
     }
 
-    /// Relaunching now would lose nothing and interrupt nothing: no shots in
-    /// memory, the notch closed, and no capture, copy, or paste in flight.
+    /// Relaunching now would lose nothing and interrupt nothing: the shelf is
+    /// empty or saved in history to come back, the notch is closed, and no
+    /// capture, copy, or paste is in flight.
     var canRelaunchUnnoticed: Bool {
-        captures.isEmpty && !isExpanded && !isInteractionInProgress && !assistedPaste.hasPendingPaste
+        (captures.isEmpty || history?.holdsShelf(captures.map(\.id)) == true)
+            && !isExpanded && !isInteractionInProgress && !assistedPaste.hasPendingPaste
     }
 
     /// Keep the notch in place while its current interaction still owns it.
@@ -558,6 +571,18 @@ final class CaptureStore {
                 self.refreshPermissions()
             }
         }
+        restoreSavedShelf()
+    }
+
+    /// With history on, the previous session's shelf comes back, unless a
+    /// new shot already arrived.
+    func restoreSavedShelf() {
+        guard let history, history.isEnabled else { return }
+        Task { [weak self] in
+            let restored = await history.restoreShelf()
+            guard let self, self.captures.isEmpty, !restored.isEmpty else { return }
+            self.captures = restored
+        }
     }
 
     func stop() {
@@ -739,15 +764,12 @@ final class CaptureStore {
 
     private func collect(_ capture: CaptureResult, expandShelf: Bool = true, preserveNavigation: Bool = false) {
         let previousSelection = selectedID
+        history?.record(capture)
         captures.removeAll { $0.id == capture.id }
         captures.insert(capture, at: 0)
-        while captures.count > 8 || (captures.count > 1 && captures.reduce(0, { $0 + ($1.pngData?.count ?? 0) }) > 64 * 1024 * 1024) {
-            // A quiet arrival must not replace the detail the user just chose.
-            // Retain it alongside the incoming shot until the user leaves it.
-            let protectedID = preserveNavigation && page == .detail ? previousSelection : nil
-            guard let removable = captures.indices.reversed().first(where: { $0 > 0 && captures[$0].id != protectedID }) else { break }
-            captures.remove(at: removable)
-        }
+        // A quiet arrival must not replace the detail the user just chose.
+        // Retain it alongside the incoming shot until the user leaves it.
+        trimShelf(protecting: preserveNavigation && page == .detail ? previousSelection : nil)
         selectedID = preserveNavigation && captures.contains(where: { $0.id == previousSelection })
             ? previousSelection : capture.id
         if !preserveNavigation { page = .shelf }
@@ -760,6 +782,54 @@ final class CaptureStore {
             : "Captured \(capture.appName) · \(capture.elementCount) accessibility elements"
         report(.success, copied ? "Copied" : (imported ? "Added" : "Captured"),
                message: copied ? summary + " · copied" : summary)
+    }
+
+    /// The shelf keeps eight shots and 64 MB of screenshots; the oldest leave
+    /// first, and they stay in history when it is on.
+    private func trimShelf(protecting protectedID: UUID? = nil) {
+        while captures.count > 8 || (captures.count > 1 && captures.reduce(0, { $0 + ($1.pngData?.count ?? 0) }) > 64 * 1024 * 1024) {
+            guard let removable = captures.indices.reversed().first(where: { $0 > 0 && captures[$0].id != protectedID }) else { break }
+            captures.remove(at: removable)
+        }
+    }
+
+    func showHistory() {
+        suppressCaptureArrival()
+        page = .history
+        isExpanded = true
+    }
+
+    /// Puts a saved shot back at the front of the shelf and opens it.
+    func openFromHistory(_ id: UUID) {
+        guard let history else { return }
+        Task { [weak self] in
+            do {
+                let capture = try await history.capture(for: id)
+                guard let self else { return }
+                self.captures.removeAll { $0.id == id }
+                self.captures.insert(capture, at: 0)
+                self.trimShelf(protecting: id)
+                self.selectedID = id
+                self.page = .detail
+            } catch {
+                self?.reportError("That shot is no longer in history.")
+            }
+        }
+    }
+
+    /// Copies a saved shot with the Copy content preference, without adding it to the shelf.
+    func copyFromHistory(_ id: UUID) {
+        guard let history else { return }
+        Task { [weak self] in
+            guard let capture = try? await history.capture(for: id) else {
+                self?.reportError("That shot is no longer in history.")
+                return
+            }
+            guard let self, self.writeCaptureToClipboard(capture) else { return }
+            self.report(.success, "Copied", message: self.copyConfirmation(for: capture))
+            self.armAssistedPaste(for: capture)
+            self.confirmManualCopy()
+        }
     }
 
     private func scheduleLanding() {
