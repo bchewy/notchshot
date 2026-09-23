@@ -100,6 +100,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func relaunch() {
+        Task { @MainActor in
+            // The next instance reads history at launch, so queued saves land first.
+            await history.settle(timeout: .seconds(3))
+            performRelaunch()
+        }
+    }
+
+    private func performRelaunch() {
         // Reopening already clears the shelf, so a waiting update goes in first.
         updates.installPendingUpdate()
         // Release the global shortcut before the replacement instance registers it.
@@ -118,6 +126,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 } else { NSApp.terminate(nil) }
             }
         }
+    }
+
+    /// A shot captured just before quitting may still be saving to history.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard history.isEnabled else { return .terminateNow }
+        Task { @MainActor in
+            await history.settle(timeout: .seconds(3))
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationWillTerminate(_ notification: Notification) {

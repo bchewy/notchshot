@@ -53,6 +53,8 @@ struct HistoryView: View {
             footer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // A long-running session applies retention whenever history is opened.
+        .onAppear { history.pruneExpired() }
     }
 
     private var searchField: some View {

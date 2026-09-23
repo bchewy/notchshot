@@ -134,9 +134,14 @@ final class ShotHistory {
         entries.removeAll { ids.contains($0.id) }
         ids.forEach { thumbnails.removeObject(forKey: $0 as NSUUID) }
         enqueue { [weak self] archive in
-            for id in ids { try? await archive.delete(id) }
+            var failed = 0
+            for id in ids {
+                do { try await archive.delete(id) } catch { failed += 1 }
+            }
             let bytes = await archive.storageBytes()
-            self?.storageBytes = bytes
+            guard let self else { return }
+            self.storageBytes = bytes
+            if failed > 0 { await self.reloadAfterFailure("Couldn’t delete \(failed == 1 ? "a shot" : "\(failed) shots") from history.", archive) }
         }
     }
 
@@ -151,7 +156,7 @@ final class ShotHistory {
                 self.savedShelf = nil
                 self.storageBytes = 0
             } catch {
-                self?.failure = "Couldn’t clear history: \(error.localizedDescription)"
+                await self?.reloadAfterFailure("Couldn’t clear history: \(error.localizedDescription)", archive)
             }
         }
     }
@@ -167,6 +172,7 @@ final class ShotHistory {
             do {
                 try await archive.saveShelf(ids)
                 self.savedShelf = ids
+                self.pruneExpired()
             } catch {
                 self.failure = "Couldn’t remember the shelf: \(error.localizedDescription)"
             }
@@ -210,9 +216,39 @@ final class ShotHistory {
         await work?.value
     }
 
+    /// Waits for queued work, but never longer than `timeout`, so a stuck
+    /// disk cannot keep the app from quitting.
+    func settle(timeout: Duration) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            var resumed = false
+            let finish = { @MainActor in
+                guard !resumed else { return }
+                resumed = true
+                continuation.resume()
+            }
+            Task { @MainActor in
+                await self.settle()
+                finish()
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: timeout)
+                finish()
+            }
+        }
+    }
+
+    /// Shows what is really on disk after an operation failed partway.
+    private func reloadAfterFailure(_ message: String, _ archive: ShotArchive) async {
+        let entries = await archive.entries()
+        guard isEnabled else { return }
+        self.entries = entries
+        storageBytes = await archive.storageBytes()
+        failure = message
+    }
+
     /// Unpinned shots past retention go. Shots on the shelf, including one
     /// still waiting to be restored after a relaunch, stay until they leave it.
-    private func pruneExpired() {
+    func pruneExpired() {
         guard isEnabled, let duration = retention.duration else { return }
         let cutoff = now().addingTimeInterval(-duration)
         let onShelf = Set(shelf).union(savedShelf ?? [])

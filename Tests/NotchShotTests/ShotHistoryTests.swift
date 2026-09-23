@@ -112,6 +112,53 @@ final class ShotHistoryTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.path))
     }
 
+    func testQuittingWaitsForAShotStillBeingSaved() async {
+        let (preferences, _) = isolatedStoreDependencies()
+        let history = makeHistory(preferences)
+        history.isEnabled = true
+        let lastShot = shot("Last", daysAgo: 0)
+        history.record(lastShot)
+        history.rememberShelf([lastShot.id])
+        await history.settle(timeout: .seconds(3))
+
+        let relaunched = makeHistory(preferences)
+        relaunched.load()
+        let shelf = await relaunched.restoreShelf()
+        XCTAssertEqual(shelf.map(\.id), [lastShot.id], "A shot captured just before quitting comes back.")
+    }
+
+    func testLeavingTheShelfEndsProtectionFromRetention() async {
+        let (preferences, _) = isolatedStoreDependencies()
+        let history = makeHistory(preferences)
+        history.isEnabled = true
+        let old = shot("Old", daysAgo: 40)
+        history.record(old)
+        history.rememberShelf([old.id])
+        await history.settle()
+        XCTAssertEqual(history.entries.map(\.id), [old.id], "Kept while it is on the shelf.")
+
+        history.rememberShelf([])
+        await history.settle()
+        XCTAssertEqual(history.entries, [], "Pruned as soon as it leaves the shelf.")
+    }
+
+    func testFailedDeletionShowsTheShotAgainWithAReason() async throws {
+        let (preferences, _) = isolatedStoreDependencies()
+        let history = makeHistory(preferences)
+        history.isEnabled = true
+        let kept = shot("Kept", daysAgo: 0)
+        history.record(kept)
+        await history.settle()
+
+        try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: root.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path) }
+        history.delete([kept.id])
+        XCTAssertEqual(history.entries, [], "Removed from the list right away.")
+        await history.settle()
+        XCTAssertEqual(history.entries.map(\.id), [kept.id], "Still on disk, so it is listed again.")
+        XCTAssertEqual(history.failure, "Couldn’t delete a shot from history.")
+    }
+
     func testShelfComesBackAfterRelaunchInOrder() async throws {
         let (preferences, clipboard) = isolatedStoreDependencies()
         let history = makeHistory(preferences)

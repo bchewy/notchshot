@@ -55,7 +55,7 @@ actor ShotArchive {
     }
 
     /// Every readable shot, newest first. Leftovers from an interrupted save
-    /// are removed; unreadable folders are skipped.
+    /// or delete are removed; unreadable folders are skipped.
     func entries() -> [ShotHistoryEntry] {
         guard let names = try? FileManager.default.contentsOfDirectory(atPath: root.path) else { return [] }
         var entries: [ShotHistoryEntry] = []
@@ -89,10 +89,14 @@ actor ShotArchive {
         return entry
     }
 
+    /// One rename moves the shot aside, so it is listed whole or not at all;
+    /// a leftover is cleaned up like an interrupted save.
     func delete(_ id: UUID) throws {
         let folder = folder(for: id)
         guard FileManager.default.fileExists(atPath: folder.path) else { return }
-        try FileManager.default.removeItem(at: folder)
+        let discarded = root.appendingPathComponent(Self.stagingPrefix + UUID().uuidString, isDirectory: true)
+        try FileManager.default.moveItem(at: folder, to: discarded)
+        try? FileManager.default.removeItem(at: discarded)
     }
 
     /// Removes every saved shot and the remembered shelf.
