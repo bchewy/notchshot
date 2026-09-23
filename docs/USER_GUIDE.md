@@ -18,13 +18,13 @@ The runnable bundle is `outputs/NotchShot.app`. The Codex Run action uses the sa
 2. Focus any app window, then press **left Shift + right Shift together (⇧ + ⇧)**, or choose Capture app from the menu bar. The default gesture is enabled automatically. To configure an alternative, open notch settings (sliders icon) and use **Alternative shortcut**. The captured window gives a brief flash, then its screenshot shrinks into a floating preview over the app. The notch opens a receiving slot and the card flies into that slot once its text and tree are ready, leaving the shelf open. An already open shelf stays open during capture. Your selected Fujifilm shutter accompanies it when Capture sound is enabled.
 3. Drag an Appshot, local image, or text onto the notch to add it to the shelf. Hovering over the collapsed notch opens the drop area. Hover a saved thumbnail for a larger screenshot and app/window details without changing your selection. While hovering, press **⌘C** to copy that exact shot using your **Copy content** preference (screenshot + AX tree by default). Move away to return ⌘C to the active app. Click it to inspect **Screenshot**, **Text**, or **AX tree**. Copy each separately, or use **Copy shot** with your preferred content. Rich-text editors can paste the screenshot followed by context in one document. Enable **Paste image, then text** for chat composers that choose only one clipboard format.
 4. **Export** creates a new folder containing `screenshot.png` when available, `context.md`, `accessibility.txt`, `accessibility-tree.txt`, `accessibility-tree.json`, `metadata.json`, `ocr.txt` when available, and `imported-text.txt` when text accompanies a drop.
-5. Press Escape to collapse the notch; click its camera tab to reopen. When shots are saved or arriving, a small **trash icon on the right of the notch** clears the entire shelf in one click, even while collapsed. It removes pending shots too and keeps copied content available to paste. The icon disappears when the shelf is empty. The menu bar provides capture, permission settings, and Quit.
+5. Press Escape to collapse the notch; click it to reopen. While shots are on the shelf, the right side of the notch shows how many. To clear them all, open the shelf and click the **trash** button in its header, beside Settings. It removes pending shots too and keeps copied content available to paste, and it appears only while there are shots. The menu bar provides capture, permission settings, and Quit.
 
 NotchShot **starts collapsed**. The collapsed window fits the hardware notch plus 36 points for small side indicators (225 × 32 on this Mac), leaving more space for menu bar items. Click it to open the compact **440 × 180-point shot shelf**. By default, new captures open this shelf; they do not open the detail view. The shelf stays open while you use it and gently collapses after three seconds away. Select a thumbnail to inspect screenshot, text, and AX tree in a **440 × 480-point** detail page, or open **Settings** at **440 × 440**. Back returns to the shelf. All size changes use the short, interruptible animation and respect macOS **Reduce Motion**. Capture notes remain available beside the capture title in details.
 
 ## Colors and appearance
 
-Open **Settings → Appearance** and choose **Mint**, **Sky**, **Lavender**, **Rose**, **Peach**, or **Gold**. The labeled color swatches preview each option; a checkmark shows the selected theme. Changes apply immediately to the mascot, shelf selection, buttons, scrollbar, and floating previews, and the choice is remembered after restarting. Mint is the default. The dark notch background stays consistent with the hardware notch.
+Open **Settings → Appearance** and choose **Mint**, **Sky**, **Lavender**, **Rose**, **Peach**, or **Gold**. The labeled color swatches preview each option; a checkmark shows the selected theme. Changes apply immediately to the aperture, shelf selection, buttons, scrollbar, and floating previews, and the choice is remembered after restarting. Mint is the default. The dark notch background stays consistent with the hardware notch.
 
 ## Following your active screen
 
@@ -32,11 +32,11 @@ Enable **Settings → Display → Follow active screen** to move the notch to th
 
 Moving preserves the shelf, selection, and current page. The notch stays put while you capture, drag, use its keyboard controls, hold a mouse button, open a menu/popover, or choose an export folder. Capture cards land on the notch's current display. Disconnecting that display moves the notch to an available one. Movement uses a brief fade and respects **Reduce Motion**. No additional macOS permission is required.
 
-## Tiny photographer
+## Aperture
 
-A tiny photographer in your selected theme color replaces the viewfinder in the left notch lane. It holds the camera selected in Shutter settings: X-T3, X100S, or F11. It lifts the camera while a capture begins, holds a little print when the screenshot is ready, and tucks it away as the shot joins the shelf. Hovering gives a small nod.
+A six-blade aperture in your selected theme color sits in the left notch lane. It closes like a shutter when a capture begins, stays half-closed while the screenshot's text and tree are read, and reopens as the shot joins the shelf. Hovering turns the blades slightly.
 
-The mascot stays inside the existing 16-point collapsed lane and grows with the open strip. It shares the bundled camera artwork with the sound picker. Motion is brief and driven by existing capture state, with no idle animation loop; Reduce Motion uses immediate poses. The right lane shows Clear shelf when shots are present and the permission indicator when empty; the notch dimensions stay the same.
+The aperture stays inside the existing 16-point collapsed lane and grows with the open strip. Motion is brief and driven by existing capture state, with no idle animation loop; Reduce Motion switches states immediately. The right lane shows how many shots are on the shelf, a spinner while capturing, or the permission indicator when the shelf is empty. The notch dimensions stay the same.
 
 ## Copy several shots
 

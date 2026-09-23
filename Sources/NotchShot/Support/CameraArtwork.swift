@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 import AppKit
 
-/// Share the already-bundled artwork between the picker and its photographer.
+/// Bundled camera artwork for the shutter picker.
 /// Pointer feedback and capture poses must not decode these large PNGs again.
 @MainActor
 enum CameraArtwork {

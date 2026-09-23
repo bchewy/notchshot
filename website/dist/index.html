@@ -128,51 +128,34 @@
               <div class="desktop-label"><span>your screen</span><i></i></div>
               <div class="notch-shell">
                 <div class="notch-top">
-                  <svg class="mascot" viewBox="0 0 44 32">
+                  <svg class="aperture" viewBox="0 0 32 32">
+                    <defs>
+                      <linearGradient id="aperture-fill" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0" stop-color="#b3fad9" />
+                        <stop offset="1" stop-color="#8ae8c4" />
+                      </linearGradient>
+                    </defs>
+                    <path fill="url(#aperture-fill)" fill-rule="evenodd" d="M1 16a15 15 0 1 0 30 0a15 15 0 1 0 -30 0ZM16 8.88L22.16 12.44L22.16 19.56L16 23.12L9.84 19.56L9.84 12.44Z" />
                     <path
-                      d="M8 28C4 22 6 7 15 6c5-8 17-6 21 5 3 6 4 14-1 17Z"
-                      fill="#8ae8c4"
-                    />
-                    <circle cx="15" cy="12" r="1.4" fill="#14251e" />
-                    <circle cx="23" cy="12" r="1.4" fill="#14251e" />
-                    <rect
-                      x="17"
-                      y="16"
-                      width="24"
-                      height="14"
-                      rx="3"
-                      fill="#333936"
-                      stroke="#708078"
-                    />
-                    <rect
-                      x="19"
-                      y="14"
-                      width="7"
-                      height="4"
-                      rx="1"
-                      fill="#aeb8b2"
-                    />
-                    <circle
-                      cx="30"
-                      cy="23"
-                      r="5"
-                      fill="#121b16"
-                      stroke="#aeb8b2"
-                    />
-                    <circle cx="30" cy="23" r="2" fill="#8ae8c4" /></svg
-                  ><span class="notch-camera"></span
-                  ><svg class="shelf-trash" viewBox="0 0 24 24" fill="none">
-                    <path
-                      d="M5 6h14M9 6V3h6v3M7 6l1 15h8l1-15M10 10v7m4-7v7"
-                      stroke="currentColor"
-                      stroke-width="1.6"
+                      stroke="#0b120e"
+                      stroke-opacity="0.6"
+                      stroke-width="1.5"
                       stroke-linecap="round"
-                    />
-                  </svg>
+                      d="M22.16 12.44L30.92 17.5M22.16 19.56L22.16 29.68M16 23.12L7.24 28.17M9.84 19.56L1.08 14.5M9.84 12.44L9.84 2.32M16 8.88L24.76 3.83"
+                    /></svg
+                  ><span class="notch-camera"></span
+                  ><span class="shelf-count">1</span>
                 </div>
                 <div class="shelf-ui">
                   <div class="shelf-heading">
                     <strong>NotchShot</strong><span>● ON DEVICE</span
+                    ><svg class="shelf-clear" viewBox="0 0 24 24" fill="none">
+                      <path
+                        d="M5 6h14M9 6V3h6v3M7 6l1 15h8l1-15M10 10v7m4-7v7"
+                        stroke="currentColor"
+                        stroke-width="1.6"
+                        stroke-linecap="round"
+                      /></svg
                     ><span class="shelf-gear">⚙</span><span>⌃</span>
                   </div>
                   <div class="shelf-tray-heading">

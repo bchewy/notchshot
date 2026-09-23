@@ -3,7 +3,7 @@ import AppKit
 import SwiftUI
 
 /// The panel itself remains a drop destination even when its SwiftUI content
-/// is collapsed to the tiny camera tab. Controls retain normal hit testing.
+/// is collapsed to the thin strip. Controls retain normal hit testing.
 @MainActor
 final class ShotDropHostingView<Content: View>: NSHostingView<Content> {
     weak var captureStore: CaptureStore?
