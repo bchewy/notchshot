@@ -1,0 +1,97 @@
+name: Stable release
+
+# Pushing a `v1.2.3` tag on main publishes the signed stable release that the
+# in-app Stable update channel installs. The tag must match APP_VERSION.
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+
+# Distinct from the reusable test workflow's own group, which also uses this
+# workflow's name.
+concurrency:
+  group: stable-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check tag
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Tag names a new version on main
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Stable tags look like v1.2.3; got $TAG."
+            exit 1
+          fi
+          # Builds on main are numbered by commit count, so a tag elsewhere
+          # could be numbered below nightlies that are already installed.
+          if ! git merge-base --is-ancestor HEAD origin/main; then
+            echo "::error::$TAG must point at a commit on main."
+            exit 1
+          fi
+          version=$(sed -n 's/^APP_VERSION="\(.*\)"$/\1/p' script/build_and_run.sh)
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::$TAG does not match APP_VERSION=\"$version\" in script/build_and_run.sh."
+            exit 1
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::error::Release $TAG already exists. Published releases are immutable; bump APP_VERSION."
+            exit 1
+          fi
+
+  test:
+    name: Test
+    needs: check
+    uses: ./.github/workflows/tests.yml
+
+  publish:
+    name: Build and publish release
+    needs: test
+    runs-on: macos-26
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Import signing certificate
+        env:
+          NOTCHSHOT_SIGNING_P12_BASE64: ${{ secrets.NOTCHSHOT_SIGNING_P12_BASE64 }}
+          NOTCHSHOT_SIGNING_P12_PASSWORD: ${{ secrets.NOTCHSHOT_SIGNING_P12_PASSWORD }}
+        run: script/ci_signing_keychain.sh import
+
+      - name: Build, sign, and package
+        run: |
+          NOTCHSHOT_BUILD_CHANNEL=Stable ./script/build_and_run.sh --stage-only
+          python3 script/package_release.py work/staged/NotchShot.app --output-dir "$RUNNER_TEMP/release"
+
+      - name: Publish release
+        run: |
+          version="${TAG#v}"
+          notes="docs/releases/$version.md"
+          if [ -f "$notes" ]; then
+            gh release create "$TAG" "$RUNNER_TEMP"/release/* --verify-tag \
+              --title "NotchShot $version" --notes-file "$notes"
+          else
+            gh release create "$TAG" "$RUNNER_TEMP"/release/* --verify-tag \
+              --title "NotchShot $version" --generate-notes
+          fi
+
+      - name: Remove signing keychain
+        if: always()
+        run: script/ci_signing_keychain.sh cleanup

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: MIT
-"""Package a clean, certificate-signed preview without building or installing it."""
+"""Package a clean, certificate-signed release without building or installing it."""
 
 import argparse
 import hashlib
@@ -77,8 +77,8 @@ def bundle_identity(bundle, revision):
         raise PackagingError("The app must explicitly record NotchShotSourceDirty=false. Rebuild after committing.")
     if info.get("NotchShotSourceRevision") != revision:
         raise PackagingError("The app source revision does not match current HEAD. Stage a new build from the clean commit.")
-    if info.get("NotchShotBuildChannel") != "Preview":
-        raise PackagingError("Only a staged Preview build can be packaged. Run script/build_and_run.sh --stage-only.")
+    if info.get("NotchShotBuildChannel") not in {"Stable", "Nightly"}:
+        raise PackagingError("Only a staged Stable or Nightly build can be packaged. Run script/build_and_run.sh --stage-only.")
     executable = bundle / "Contents/MacOS/NotchShot"
     if not executable.is_file() or not os.access(executable, os.X_OK):
         raise PackagingError("The app executable is missing or is not executable.")
@@ -101,7 +101,7 @@ def verify_signature(bundle, certificates=None):
     )
     description = (details.stdout + details.stderr).decode("utf-8", errors="replace")
     if details.returncode or "Signature=adhoc" in description or "Authority=" not in description:
-        raise PackagingError("Public preview packaging requires a certificate-backed signature; ad-hoc or unsigned apps are refused.")
+        raise PackagingError("Public release packaging requires a certificate-backed signature; ad-hoc or unsigned apps are refused.")
     if certificates is not None:
         certificates.mkdir()
         prefix = certificates / "cert"
@@ -152,7 +152,7 @@ def verify_zip(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("app_bundle", type=Path, help="Existing staged, certificate-signed Preview .app")
+    parser.add_argument("app_bundle", type=Path, help="Existing staged, certificate-signed Stable or Nightly .app")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "work/releases")
     args = parser.parse_args()
     bundle = args.app_bundle.expanduser().resolve()
@@ -170,6 +170,9 @@ def main():
     identity = bundle_identity(bundle, revision)
     selected = source_paths()
     stem = f"NotchShot-{identity['version']}"
+    if identity["channel"] == "Nightly":
+        # Nightlies share a version until it is bumped; the build keeps names unique.
+        stem += f"-nightly.{identity['build']}"
     names = [f"{stem}.zip", f"{stem}-source.zip", f"{stem}-SHA256SUMS.txt", f"{stem}-release.json"]
     output.mkdir(parents=True, exist_ok=True)
     if any((output / name).exists() or (output / name).is_symlink() for name in names):
@@ -222,10 +225,10 @@ def main():
                 path.unlink()
             raise PackagingError(f"Could not publish immutable release artifacts: {error}") from error
 
-    print(f"Verified preview {identity['version']} ({identity['build']}) from {revision}")
+    print(f"Verified {identity['channel'].lower()} {identity['version']} ({identity['build']}) from {revision}")
     for name in names:
         print(output / name)
-    print("Certificate signature verified. Notarization was not assessed; this is a preview, not a notarized release.")
+    print("Certificate signature verified. Notarization was not assessed; this is not a notarized release.")
 
 
 if __name__ == "__main__":

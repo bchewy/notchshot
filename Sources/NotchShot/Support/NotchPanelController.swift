@@ -38,6 +38,7 @@ final class NotchPanelController {
     }
 
     init(store: CaptureStore,
+         updates: UpdateController? = nil,
          displays: @escaping @MainActor () -> [NotchDisplay] = { NotchPanelController.connectedDisplays() },
          preferredDisplayID: @escaping @MainActor () -> CGDirectDisplayID? = {
              NotchGeometry.preferredScreen.flatMap { NotchPanelController.displayID($0) }
@@ -66,7 +67,7 @@ final class NotchPanelController {
         motion = NotchMotion(progress: progress, at: now)
         sizeMotion = NotchSizeMotion(size: size, minimum: collapsedSize,
                                     maximum: Self.maximumSize(for: collapsedSize), at: now)
-        let root = NotchRootView(store: store, presentation: presentation)
+        let root = NotchRootView(store: store, presentation: presentation, updates: updates)
         let host = ShotDropHostingView(rootView: root)
         host.configureDropTarget(store: store)
         host.sizingOptions = []

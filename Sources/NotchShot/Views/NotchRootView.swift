@@ -5,6 +5,7 @@ import SwiftUI
 struct NotchRootView: View {
     @Bindable var store: CaptureStore
     @Bindable var presentation: NotchPresentation
+    var updates: UpdateController?
     @State private var isReviewingBatch = false
     @State private var isHoveringMascot = false
     @State private var isHoveringClear = false
@@ -33,6 +34,7 @@ struct NotchRootView: View {
         .preferredColorScheme(.dark)
         .tint(store.theme.accent)
         .environment(\.notchTheme, store.theme)
+        .environment(updates)
         .onChange(of: store.isExpanded) { _, expanded in
             if !expanded { isReviewingBatch = false }
         }

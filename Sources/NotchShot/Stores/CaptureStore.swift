@@ -325,6 +325,12 @@ final class CaptureStore {
             || isRecordingShortcut || isPresentingExport || pendingCapture != nil || isPreparingBatch
     }
 
+    /// Relaunching now would lose nothing and interrupt nothing: no shots in
+    /// memory, the notch closed, and no capture, copy, or paste in flight.
+    var canRelaunchUnnoticed: Bool {
+        captures.isEmpty && !isExpanded && !isInteractionInProgress && !assistedPaste.hasPendingPaste
+    }
+
     /// Keep the notch in place while its current interaction still owns it.
     /// The controller checks the pointer against the panel's live bounds.
     var shouldDeferScreenMove: Bool {

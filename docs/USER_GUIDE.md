@@ -68,7 +68,22 @@ Your alternative keyboard shortcut is saved across launches. Include Command, Op
 
 **Shift + Shift** is the default capture gesture. Press **left Shift + right Shift together**; use **Shift + Shift to capture** in Settings to turn it off. It captures once; release both before trying again. Typing, other modifiers, and mouse actions cancel the gesture. This replaces the old double Command option; upgrading preserves explicit enabled/disabled choices. The shelf shows **⇧ + ⇧ to capture** while its monitor is available; otherwise it shows the configured alternative. The menu bar also has a **Capture sound** toggle. Settings offers three illustrated camera tiles for **Fujifilm X-T3**, **Fujifilm X100S**, and **Fujifilm FinePix F11**. Click a camera to select and preview its shutter; click the selected tile to replay. Mint selection and a gentle hover lift make the choice visible. Keyboard and accessibility controls remain native, and hover/press movement respects Reduce Motion. Selection is saved across launches, with X-T3 as the default. The recordings, licenses, credits, and processing are documented in [shutter sound notes](SHUTTER_SOUND.md).
 
-Click the **×** at the top right of a shelf thumbnail to remove that shot. Captures stay in memory until explicitly exported or copied. The session keeps at most eight captures, also trimming older images when their combined PNG size exceeds 64 MB. Quit or Clear session captures removes the in-app history. Removing shots does not delete exported files or copied clipboard data. If a capture finishes while you are viewing another shot, both are preserved; this can temporarily exceed the image budget until the next normal collection. There is no network client, server, account, background screenshot loop, or AI dependency.
+Click the **×** at the top right of a shelf thumbnail to remove that shot. Captures stay in memory until explicitly exported or copied. The session keeps at most eight captures, also trimming older images when their combined PNG size exceeds 64 MB. Quit or Clear session captures removes the in-app history. Removing shots does not delete exported files or copied clipboard data. If a capture finishes while you are viewing another shot, both are preserved; this can temporarily exceed the image budget until the next normal collection. There is no server, account, background screenshot loop, or AI dependency. The only network access is the optional update check described below; captures never leave your Mac.
+
+## Updates
+
+Release builds keep themselves current from [GitHub Releases](https://github.com/bchewy/notchshot/releases). Open **Settings → Updates** to choose a channel:
+
+- **Stable** follows tagged releases (`v1.2.3`). This is the default for stable downloads.
+- **Nightly** follows the newest daily build of `main` (`nightly-<build>`), and also takes a stable release when it is newer. This is the default for nightly downloads.
+
+**Install updates automatically** is on by default. NotchShot checks GitHub shortly after launch and then about every six hours. A newer build downloads in the background and must pass every check before it can run: its checksum must match the release manifest, its version and build must match that release, and its code signature must satisfy the same designated requirement as the running app, with certificate revocation checked. Because Accessibility and Screen Recording access are tied to that same signature, permissions carry over. Anything that fails is discarded.
+
+A verified update installs only when nothing would be lost: the shelf is empty, the notch is closed, and no capture, copy, or paste is in progress. NotchShot then swaps in the new app and reopens within a second. Otherwise the update waits and installs when you quit. **Restart to update** installs it immediately, and clears the shelf like any restart. Updates never install an older build, so switching from Nightly to Stable keeps your nightly until a newer stable release is published.
+
+Turn automatic updates off to stop all background network access. **Check now**, or **Check for updates…** in the menu bar, still checks on request, and **Restart to update** installs what it finds. Checks send an ordinary anonymous HTTPS request with the app version; no captures, settings, or identifiers are sent.
+
+Local builds from `script/build_and_run.sh` never update themselves. NotchShot also can't update when it runs from a quarantined download location (move it to Applications first) or from a folder you can't write to; Settings explains which applies.
 
 ## Action feedback
 

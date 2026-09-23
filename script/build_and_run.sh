@@ -6,6 +6,8 @@ MODE="${1:-run}"
 case "$MODE" in run|--build-only|--stage-only|--verify|--debug|--logs|--telemetry) ;; *) echo "Usage: $0 [--build-only|--stage-only|--verify|--debug|--logs|--telemetry]" >&2; exit 2 ;; esac
 APP_NAME="NotchShot"
 BUNDLE_ID="com.bchewy.NotchShot"
+# Stable tags must match this version (docs/RELEASING.md).
+APP_VERSION="0.7.0"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_BUNDLE="$PROJECT_ROOT/outputs/$APP_NAME.app"
 STAGED_APP="$PROJECT_ROOT/work/staged/$APP_NAME.app"
@@ -13,7 +15,12 @@ BUILD_CONFIGURATION=debug
 BUILD_CHANNEL=Local
 if [[ "$MODE" == --stage-only ]]; then
   BUILD_CONFIGURATION=release
-  BUILD_CHANNEL=Preview
+  # The updater follows this channel; CI stages Nightly builds of main.
+  BUILD_CHANNEL="${NOTCHSHOT_BUILD_CHANNEL:-Stable}"
+  if [[ "$BUILD_CHANNEL" != Stable && "$BUILD_CHANNEL" != Nightly ]]; then
+    echo "NOTCHSHOT_BUILD_CHANNEL must be Stable or Nightly." >&2
+    exit 2
+  fi
 fi
 cd "$PROJECT_ROOT"
 
@@ -87,7 +94,7 @@ if [[ -z "$SIGNING_IDENTITY" ]]; then
 fi
 
 if [[ "$MODE" == --stage-only && "$SIGNING_IDENTITY" == - ]]; then
-  echo "Preview packaging requires the existing certificate signing identity. No app has been replaced." >&2
+  echo "Release packaging requires the existing certificate signing identity. No app has been replaced." >&2
   exit 1
 fi
 
@@ -103,8 +110,17 @@ else
   SOURCE_REVISION="unknown"
 fi
 if [[ "$MODE" == --stage-only && "$SOURCE_DIRTY" == true ]]; then
-  echo "Commit the source changes before staging a preview so its source revision is exact." >&2
+  echo "Commit the source changes before staging a release so its source revision is exact." >&2
   exit 1
+fi
+# The commit count only grows on main, so every stable and nightly build is
+# numbered above the last. The updater compares these numbers. 0.6.0 was 29.
+BUILD_NUMBER="$(git rev-list --count HEAD 2>/dev/null || echo 0)"
+if [[ "$MODE" == --stage-only ]]; then
+  if [[ "$(git rev-parse --is-shallow-repository)" != false || "$BUILD_NUMBER" -le 29 ]]; then
+    echo "Staging needs the full git history for the build number (fetch-depth: 0 in CI)." >&2
+    exit 1
+  fi
 fi
 swift build --configuration "$BUILD_CONFIGURATION" --disable-sandbox
 BUILD_BINARY="$(swift build --configuration "$BUILD_CONFIGURATION" --disable-sandbox --show-bin-path)/$APP_NAME"
@@ -132,8 +148,8 @@ cat > "$STAGED_APP/Contents/Info.plist" <<PLIST
 <key>CFBundleName</key><string>$APP_NAME</string>
 <key>CFBundleDisplayName</key><string>$APP_NAME</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.6.0</string>
-<key>CFBundleVersion</key><string>29</string>
+<key>CFBundleShortVersionString</key><string>$APP_VERSION</string>
+<key>CFBundleVersion</key><string>$BUILD_NUMBER</string>
 <key>LSMinimumSystemVersion</key><string>15.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
