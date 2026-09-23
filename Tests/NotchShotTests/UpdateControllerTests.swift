@@ -231,6 +231,70 @@ final class UpdateControllerTests: XCTestCase {
         XCTAssertEqual(notices, ["Update ready", "Update not installed"])
     }
 
+    func testFailedAutomaticInstallKeepsCheckingLater() async {
+        let fixture = makeController()
+        let (controller, service, clock) = (fixture.controller, fixture.service, fixture.clock)
+        controller.canInstallNow = { true }
+        service.latest = .success(offer(build: 41))
+        service.installError = UpdateError.installation("NotchShot couldn’t replace itself: Resource busy.")
+        controller.start()
+        clock.advance(by: .seconds(15))
+        await controller.activeCheck?.value
+        XCTAssertEqual(controller.phase, .failed("NotchShot couldn’t replace itself: Resource busy."))
+
+        service.installError = nil
+        clock.advance(by: .seconds(60 * 60))
+        await controller.activeCheck?.value
+        XCTAssertEqual(service.checkedChannels.count, 2, "Automatic updates continue after a failed install.")
+        XCTAssertEqual(service.installed.map(\.offer.build), [41])
+    }
+
+    func testFailedDownloadKeepsTheVerifiedUpdateWaiting() async {
+        let fixture = makeController()
+        let (controller, service) = (fixture.controller, fixture.service)
+        var notices: [String] = []
+        controller.onNotice = { _, title, _ in notices.append(title) }
+        service.latest = .success(offer(build: 41))
+        await controller.checkNow()?.value
+
+        service.latest = .success(offer(build: 42))
+        service.stageError = UpdateError.network("The update download was incomplete.")
+        await controller.checkNow()?.value
+        XCTAssertEqual(service.discarded, [], "Build 41 is kept until a replacement is verified.")
+        XCTAssertEqual(controller.phase, .ready(offer(build: 41)))
+        XCTAssertEqual(notices, ["Update ready", "Update check failed"])
+
+        controller.installPendingUpdate()
+        XCTAssertEqual(service.installed.map(\.offer.build), [41])
+    }
+
+    func testTurningAutomaticUpdatesOffStopsABackgroundCheckButNotARequestedOne() async {
+        let fixture = makeController()
+        let (controller, service, clock) = (fixture.controller, fixture.service, fixture.clock)
+        service.holdChecks = true
+        service.latest = .success(offer(build: 41))
+        controller.start()
+        clock.advance(by: .seconds(15))
+        let background = controller.activeCheck
+        await service.waitForHeldCheck()
+
+        controller.automaticUpdates = false
+        XCTAssertEqual(controller.phase, .idle)
+        service.releaseHeldChecks()
+        await background?.value
+        XCTAssertEqual(service.stagedOffers, [], "Nothing downloads after automatic updates are turned off.")
+        XCTAssertEqual(clock.activeCount, 0)
+
+        service.holdChecks = true
+        let requested = controller.checkNow()
+        await service.waitForHeldCheck()
+        controller.automaticUpdates = true
+        controller.automaticUpdates = false
+        service.releaseHeldChecks()
+        await requested?.value
+        XCTAssertEqual(controller.phase, .ready(offer(build: 41)), "A check the user asked for still finishes.")
+    }
+
     func testStoreAllowsAnUnnoticedRelaunchOnlyWithAnEmptyClosedIdleShelf() {
         let (preferences, clipboard) = isolatedStoreDependencies()
         let paste = PendingPasteStub()
@@ -289,6 +353,7 @@ final class UpdateControllerTests: XCTestCase {
 @MainActor
 private final class FakeUpdateService: UpdateServing {
     var latest: Result<UpdateOffer?, Error> = .success(nil)
+    var stageError: Error?
     var installError: Error?
     var holdChecks = false
     private(set) var checkedChannels: [UpdateChannel] = []
@@ -311,6 +376,7 @@ private final class FakeUpdateService: UpdateServing {
     }
 
     func stage(_ offer: UpdateOffer) async throws -> StagedUpdate {
+        if let stageError { throw stageError }
         stagedOffers.append(offer)
         let directory = URL(fileURLWithPath: "/tmp/NotchShotUpdateControllerTests/\(offer.build)", isDirectory: true)
         return StagedUpdate(offer: offer, directory: directory, app: directory.appendingPathComponent("NotchShot.app"))

@@ -34,7 +34,13 @@ final class UpdateController {
             preferences.set(automaticUpdates, forKey: "automaticUpdates")
             cancelScheduledCheck()
             cancelInstallRetry()
-            if automaticUpdates && started { beginCheck(userInitiated: false) }
+            if automaticUpdates {
+                if started { beginCheck(userInitiated: false) }
+            } else if activeCheck != nil, !activeCheckIsUserInitiated {
+                // Off means no background network, including a check already under way.
+                abandonCheck()
+                phase = staged.map { .ready($0.offer) } ?? .idle
+            }
         }
     }
     var channel: UpdateChannel {
@@ -57,6 +63,7 @@ final class UpdateController {
     @ObservationIgnored var onNotice: ((StatusNotice.Kind, String, String) -> Void)?
     /// The check in progress, if any. Tests await it.
     @ObservationIgnored private(set) var activeCheck: Task<Void, Never>?
+    @ObservationIgnored private var activeCheckIsUserInitiated = false
 
     @ObservationIgnored private let preferences: UserDefaults
     @ObservationIgnored private let service: (any UpdateServing)?
@@ -163,6 +170,8 @@ final class UpdateController {
             service.discard(update)
             phase = .failed(error.localizedDescription)
             onNotice?(.error, "Update not installed", error.localizedDescription)
+            // Installing cancelled the next check; without one, updates would stop here.
+            if automaticUpdates && started { scheduleCheck(after: Self.retryInterval) }
         }
     }
 
@@ -185,7 +194,11 @@ final class UpdateController {
     @discardableResult
     private func beginCheck(userInitiated: Bool) -> Task<Void, Never>? {
         guard let service else { return nil }
-        if let activeCheck { return activeCheck }
+        if let activeCheck {
+            // Asking during a background check makes it the user's check.
+            if userInitiated { activeCheckIsUserInitiated = true }
+            return activeCheck
+        }
         // The installed bundle is already newer than this running process.
         if case .installing = phase { return nil }
         if isInstalled { return nil }
@@ -194,16 +207,19 @@ final class UpdateController {
         let token = generation
         let channel = channel
         phase = .checking
+        activeCheckIsUserInitiated = userInitiated
         let task = Task { [weak self] in
             guard let self else { return }
-            await self.check(service: service, channel: channel, token: token, userInitiated: userInitiated)
+            await self.check(service: service, channel: channel, token: token)
         }
         activeCheck = task
         return task
     }
 
-    private func check(service: any UpdateServing, channel: UpdateChannel, token: Int, userInitiated: Bool) async {
+    private func check(service: any UpdateServing, channel: UpdateChannel, token: Int) async {
         var succeeded = false
+        // Read after each await: the generation check keeps this the same check.
+        var userInitiated: Bool { activeCheckIsUserInitiated }
         do {
             let offer = try await service.latestOffer(for: channel)
             guard generation == token else { return }
@@ -211,11 +227,11 @@ final class UpdateController {
             preferences.set(lastChecked, forKey: "lastUpdateCheck")
             if let offer {
                 if staged?.offer != offer {
-                    // A newer release supersedes the one waiting to install.
-                    discardStaged()
                     phase = .downloading(offer)
                     let update = try await service.stage(offer)
                     guard generation == token else { service.discard(update); return }
+                    // Only a verified replacement supersedes the update waiting to install.
+                    discardStaged()
                     staged = update
                 }
                 phase = .ready(offer)
@@ -236,7 +252,8 @@ final class UpdateController {
             if error is CancellationError {
                 phase = staged.map { .ready($0.offer) } ?? .idle
             } else {
-                phase = .failed(error.localizedDescription)
+                // A verified update already waiting stays installable.
+                phase = staged.map { .ready($0.offer) } ?? .failed(error.localizedDescription)
                 if userInitiated { onNotice?(.error, "Update check failed", error.localizedDescription) }
             }
         }

@@ -108,6 +108,7 @@ jobs:
 
       - name: Keep the newest 7 nightlies
         run: |
+          set -o pipefail
           gh release list --limit 100 --json tagName,publishedAt \
             --jq '[.[] | select(.tagName | test("^nightly-[0-9]+$"))] | sort_by(.publishedAt) | reverse | .[7:] | .[].tagName' |
           while read -r tag; do

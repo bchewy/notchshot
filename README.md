@@ -67,7 +67,7 @@ GitHub Actions runs the build and the suite on every push and pull request
 of `main` and the stable releases published from `v*` tags; see
 [releasing](docs/RELEASING.md).
 
-The current suite has **409 tests**, covering the capture entry path, capture
+The current suite has **412 tests**, covering the capture entry path, capture
 formatting, clipboard preparation, selection, shortcuts, shelf motion, and
 auto-collapse, plus theme preferences, display following, and update verification.
 See [verification notes](docs/VERIFICATION.md) for the historical checks and
