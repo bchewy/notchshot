@@ -94,16 +94,22 @@ signing failure must be resolved before packaging; do not substitute an ad-hoc
 signature.
 
 The packager accepts an existing signed bundle and never builds, installs,
-launches, uploads, or changes it. Use `--output-dir /path/to/empty-directory` to
+launches, uploads, or changes it. It lays out the disk image with `dmgbuild`,
+installed on first use into `work/dmg-tools` from the exact hash-pinned wheels
+in `script/dmg/requirements.txt` (this needs network access once). To change the
+image's background, edit and run `swift script/dmg/make_background.swift`. Use `--output-dir /path/to/empty-directory` to
 choose another destination. Within this checkout, that directory must be ignored
 by git. It creates these immutable files in `work/releases/` by default (nightly
 names add `-nightly.BUILD` after the version):
 
-- `NotchShot-VERSION.zip`: the app bundle.
+- `NotchShot-VERSION.zip`: the app bundle. The updater installs from this.
+- `NotchShot-VERSION.dmg`: the same app beside an Applications link, for people
+  to drag into place. The packager mounts it read-only and checks that it shows
+  only those two items and that the app matches the input exactly.
 - `NotchShot-VERSION-source.zip`: the exact committed app source, tests, resources,
   build scripts, documentation, and licenses, plus `SOURCE_REVISION` and
   `BUILD_METADATA.json`.
-- `NotchShot-VERSION-SHA256SUMS.txt`: SHA-256 hashes of both ZIP files.
+- `NotchShot-VERSION-SHA256SUMS.txt`: SHA-256 hashes of the ZIP files and disk image.
 - `NotchShot-VERSION-release.json`: version, build, channel, source identity,
   verification methods, and artifact hashes. The updater reads this manifest.
 

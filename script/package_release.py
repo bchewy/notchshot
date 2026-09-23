@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -150,6 +151,53 @@ def verify_zip(path):
                 raise PackagingError(f"Unsafe archive member: {member}")
 
 
+DMG_DIRECTORY = ROOT / "script/dmg"
+DMG_TOOLS = ROOT / "work/dmg-tools"
+
+
+def dmgbuild_python():
+    """A private virtualenv with the pinned, hash-checked dmgbuild wheels."""
+    requirements = DMG_DIRECTORY / "requirements.txt"
+    python = DMG_TOOLS / "bin/python3"
+    installed = DMG_TOOLS / "requirements.txt"
+    if not (python.exists() and installed.exists() and installed.read_bytes() == requirements.read_bytes()):
+        shutil.rmtree(DMG_TOOLS, ignore_errors=True)
+        run(sys.executable, "-m", "venv", str(DMG_TOOLS))
+        run(str(python), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--require-hashes",
+            "--only-binary=:all:", "--no-deps", "-r", str(requirements))
+        shutil.copyfile(requirements, installed)
+    return python
+
+
+def build_dmg(bundle, destination):
+    """The drag-to-Applications disk image: the app beside an Applications link."""
+    run(str(dmgbuild_python()), "-m", "dmgbuild", "-s", str(DMG_DIRECTORY / "settings.py"),
+        "-D", f"app={bundle}", "-D", f"background={DMG_DIRECTORY / 'background.png'}",
+        "-D", f"volume_icon={ROOT / 'Sources/NotchShot/Resources/AppIcon.icns'}",
+        "NotchShot", str(destination))
+
+
+def verify_dmg(path, identity, revision, mount_point):
+    """Mounts the image read-only and checks it holds exactly the verified app."""
+    run("/usr/bin/hdiutil", "verify", "-quiet", str(path))
+    mount_point.mkdir()
+    run("/usr/bin/hdiutil", "attach", "-readonly", "-nobrowse", "-noautoopen", "-quiet",
+        "-mountpoint", str(mount_point), str(path))
+    try:
+        visible = {entry.name for entry in mount_point.iterdir() if not entry.name.startswith(".")}
+        if visible != {"NotchShot.app", "Applications"}:
+            raise PackagingError(f"The disk image should show only NotchShot.app and Applications, not {sorted(visible)}.")
+        applications = mount_point / "Applications"
+        if not applications.is_symlink() or os.readlink(applications) != "/Applications":
+            raise PackagingError("The disk image's Applications item must be a link to /Applications.")
+        app = mount_point / "NotchShot.app"
+        if bundle_identity(app, revision) != identity:
+            raise PackagingError("The app in the disk image differs from the input in version, source identity, or executable hash.")
+        verify_signature(app)
+    finally:
+        run("/usr/bin/hdiutil", "detach", "-quiet", "-force", str(mount_point))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("app_bundle", type=Path, help="Existing staged, certificate-signed Stable or Nightly .app")
@@ -173,7 +221,8 @@ def main():
     if identity["channel"] == "Nightly":
         # Nightlies share a version until it is bumped; the build keeps names unique.
         stem += f"-nightly.{identity['build']}"
-    names = [f"{stem}.zip", f"{stem}-source.zip", f"{stem}-SHA256SUMS.txt", f"{stem}-release.json"]
+    # The updater installs from the ZIP; people download the disk image.
+    names = [f"{stem}.zip", f"{stem}.dmg", f"{stem}-source.zip", f"{stem}-SHA256SUMS.txt", f"{stem}-release.json"]
     output.mkdir(parents=True, exist_ok=True)
     if any((output / name).exists() or (output / name).is_symlink() for name in names):
         raise PackagingError("Versioned release files already exist. They are immutable; choose an empty output directory or bump the app version.")
@@ -182,7 +231,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix=".notchshot-package-", dir=output) as temporary:
         scratch = Path(temporary)
         verify_signature(bundle, scratch / "certificates")
-        app_zip, source_zip, checksums, metadata = [scratch / name for name in names]
+        app_zip, app_dmg, source_zip, checksums, metadata = [scratch / name for name in names]
         run("/usr/bin/ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(bundle), str(app_zip))
         verify_zip(app_zip)
         extraction = scratch / "extracted"
@@ -192,6 +241,8 @@ def main():
         if bundle_identity(extracted_app, revision) != identity:
             raise PackagingError("The extracted app version, source identity, or executable hash differs from the input.")
         verify_signature(extracted_app)
+        build_dmg(bundle, app_dmg)
+        verify_dmg(app_dmg, identity, revision, scratch / "dmg-mount")
 
         source_prefix = f"{stem}-source/"
         run("git", "archive", "--format=zip", f"--prefix={source_prefix}", f"--output={source_zip}", revision, "--", *selected)
@@ -205,7 +256,7 @@ def main():
             actual = {name for name in archive.namelist() if not name.endswith("/")}
             if actual != expected | {source_prefix + "SOURCE_REVISION", source_prefix + "BUILD_METADATA.json"}:
                 raise PackagingError("The source archive does not contain exactly the committed source allowlist plus build metadata.")
-        hashes = {path.name: digest(path) for path in (app_zip, source_zip)}
+        hashes = {path.name: digest(path) for path in (app_zip, app_dmg, source_zip)}
         checksums.write_text("".join(f"{value}  {name}\n" for name, value in hashes.items()), encoding="utf-8")
         metadata.write_text(json.dumps({**build_metadata, "artifacts": hashes}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
