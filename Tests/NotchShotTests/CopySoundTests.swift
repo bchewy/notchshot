@@ -58,7 +58,7 @@ final class CopySoundTests: XCTestCase {
         XCTAssertTrue(fixture.clipboard.string(forType: .string)?.contains(capture.accessibilityText) == true)
         store.copyTree()
         XCTAssertEqual(fixture.sound.playCount, 4)
-        XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.treeText)
+        XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.clipboardText)
         store.copyContext()
         XCTAssertEqual(fixture.sound.playCount, 5, "Copy all delegates to copyCapture and should not confirm twice.")
 

@@ -71,7 +71,7 @@ final class CaptureEngineTests: XCTestCase {
         CaptureService.applyAccessibility(readerResult, to: &capture)
 
         XCTAssertFalse(capture.accessibilityTreeIncomplete)
-        XCTAssertEqual(capture.clipboardText, capture.treeText)
+        XCTAssertEqual(capture.clipboardBody, capture.treeText)
         XCTAssertEqual(capture.warnings.count, 2, "The informational AX visibility note is also not an incompleteness signal.")
     }
 
@@ -105,7 +105,7 @@ final class CaptureEngineTests: XCTestCase {
 
         XCTAssertFalse(needsBrowserFallback)
         XCTAssertFalse(capture.accessibilityTreeIncomplete)
-        XCTAssertEqual(capture.clipboardText, capture.treeText)
+        XCTAssertEqual(capture.clipboardBody, capture.treeText)
         XCTAssertFalse(capture.warnings.contains { $0.contains("controls but no web document tree") })
     }
 }

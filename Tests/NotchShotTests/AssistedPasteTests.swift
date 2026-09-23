@@ -25,7 +25,9 @@ final class AssistedPasteTests: XCTestCase {
         XCTAssertEqual(fixture.environment.posts.count, 2)
         XCTAssertNil(fixture.environment.posts[1].png)
         XCTAssertEqual(fixture.environment.posts[1].text, fixture.capture.clipboardText)
-        XCTAssertEqual(fixture.environment.posts[1].text, "Window: \"Fixture window\", App: Assisted paste fixture.\nbutton Complete tree")
+        XCTAssertEqual(fixture.environment.posts[1].text, CapturedContext.opening
+                       + "\nWindow: \"Fixture window\", App: Assisted paste fixture.\nbutton Complete tree\n"
+                       + CapturedContext.closing)
         XCTAssertEqual(fixture.environment.posts[1].target, fixture.environment.posts[0].target)
 
         try await fixture.advanceRestoreDelay()

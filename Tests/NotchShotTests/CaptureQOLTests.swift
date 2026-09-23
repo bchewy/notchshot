@@ -112,7 +112,7 @@ final class CaptureQOLTests: XCTestCase {
         store.autoCopyCompletedCapture(completed)
         let copiedText = try XCTUnwrap(fixture.clipboard.string(forType: .string))
         XCTAssertEqual(copiedText, completed.clipboardText)
-        XCTAssertEqual(copiedText, completed.treeText)
+        XCTAssertEqual(copiedText, [CapturedContext.opening, completed.treeText, CapturedContext.closing].joined(separator: "\n"))
         XCTAssertFalse(copiedText.contains("## Accessibility text"))
         XCTAssertFalse(copiedText.contains(completed.accessibilityText))
         XCTAssertTrue(copiedText.contains("button Submit Complete capture"))

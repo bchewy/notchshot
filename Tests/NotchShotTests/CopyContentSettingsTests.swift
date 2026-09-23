@@ -110,7 +110,7 @@ final class CopyContentSettingsTests: XCTestCase {
         XCTAssertEqual(f.board.string(forType: .string), CaptureClipboardService.treeText(for: batch))
         XCTAssertTrue(f.board.string(forType: .string)?.hasPrefix("# NotchShot — 2 trees · No images") == true)
         for capture in shots {
-            XCTAssertTrue(f.board.string(forType: .string)?.contains(capture.clipboardText) == true)
+            XCTAssertTrue(f.board.string(forType: .string)?.contains(capture.clipboardBody) == true)
         }
         XCTAssertNil(f.board.data(forType: .png))
         XCTAssertNil(f.board.data(forType: .tiff))
@@ -210,7 +210,7 @@ final class CopyContentSettingsTests: XCTestCase {
 
         f.store.copyTree()
         XCTAssertEqual(f.board.string(forType: .string), capture.clipboardText)
-        XCTAssertTrue(f.board.string(forType: .string)?.hasPrefix("[Accessibility tree is incomplete:") == true)
+        XCTAssertTrue(f.board.string(forType: .string)?.hasPrefix(CapturedContext.opening + "\n[Accessibility tree is incomplete:") == true)
         XCTAssertNil(f.board.data(forType: .png))
         f.store.copyText()
         XCTAssertTrue(f.board.string(forType: .string)?.contains(capture.accessibilityText) == true)

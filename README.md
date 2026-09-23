@@ -16,6 +16,8 @@ your notch. Copy one shot or several into your next conversation.
 - Preview, select, copy, import, and export shots from a compact notch shelf.
 - Choose screenshot + AX tree (default), image only, or AX tree only for copying.
 - Copy full accessibility trees or clearly marked compact tree excerpts.
+- Copied trees include element positions and states, skip empty layout wrappers,
+  and are marked as captured data for AI tools.
 - Assist image-then-text pasting into apps that accept only one clipboard format.
 - Customize shutter sounds, automatic copying, and gentle auto-collapse behavior.
 - Pick Mint, Sky, Lavender, Rose, Peach, or Gold in Appearance settings.
@@ -69,7 +71,7 @@ GitHub Actions runs the build and the suite on every push and pull request
 of `main` and the stable releases published from `v*` tags; see
 [releasing](docs/RELEASING.md).
 
-The current suite has **434 tests**, covering the capture entry path, capture
+The current suite has **452 tests**, covering the capture entry path, capture
 formatting, clipboard preparation, selection, shortcuts, shelf motion, and
 auto-collapse, plus theme preferences, display following, shot history, and
 update verification.

@@ -10,8 +10,8 @@ final class CaptureClipboardTests: XCTestCase {
         capture.accessibilityTreeIncomplete = true
         let item = CaptureClipboardService.makeItem(for: capture)
         let text = try XCTUnwrap(item.string(forType: .string))
-        XCTAssertTrue(text.hasPrefix("[Accessibility tree is incomplete:"))
-        XCTAssertTrue(text.hasSuffix(capture.treeText))
+        XCTAssertTrue(text.hasPrefix(CapturedContext.opening + "\n[Accessibility tree is incomplete:"))
+        XCTAssertTrue(text.hasSuffix(capture.treeText + "\n" + CapturedContext.closing))
         XCTAssertFalse(text.contains(capture.ocrText))
         XCTAssertFalse(text.contains(capture.accessibilityText))
         XCTAssertEqual(item.data(forType: .png), capture.pngData)
@@ -98,7 +98,9 @@ final class CaptureClipboardTests: XCTestCase {
         capture.axTree = []
         let item = CaptureClipboardService.makeItem(for: capture)
         let text = try XCTUnwrap(item.string(forType: .string))
-        XCTAssertEqual(text, "Window: \"\(capture.windowTitle)\", App: \(capture.appName).\nNo accessibility tree was available for this shot.")
+        XCTAssertEqual(text, CapturedContext.opening
+                       + "\nWindow: \"\(capture.windowTitle)\", App: \(capture.appName).\nNo accessibility tree was available for this shot.\n"
+                       + CapturedContext.closing)
         XCTAssertFalse(text.contains(capture.ocrText))
         XCTAssertFalse(text.contains(capture.accessibilityText))
         XCTAssertFalse(text.contains(capture.importedText))
@@ -165,7 +167,8 @@ final class CaptureClipboardTests: XCTestCase {
     private func assertCombinedPaste(_ receiver: NSTextView, matches capture: CaptureResult,
                                      file: StaticString = #filePath, line: UInt = #line) throws {
         let content = receiver.attributedString()
-        XCTAssertTrue(content.string.hasSuffix(capture.treeText), "A rich paste must retain the hierarchy exactly.", file: file, line: line)
+        XCTAssertTrue(content.string.hasSuffix(capture.clipboardText), "A rich paste must end with the exact copied context.", file: file, line: line)
+        XCTAssertTrue(content.string.contains(capture.treeText), "A rich paste must retain the hierarchy exactly.", file: file, line: line)
         let prefixLength = content.string.count - capture.clipboardText.count
         XCTAssertGreaterThan(prefixLength, 0, file: file, line: line)
         if prefixLength > 0 {

@@ -15,7 +15,7 @@ final class CaptureBatchTests: XCTestCase {
         XCTAssertEqual(compact.originalCharacterCount, full.characterCount)
         XCTAssertLessThanOrEqual(shotSections(compact)[0].count, CaptureBatch.maximumCompactCharactersPerShot)
         XCTAssertTrue(compact.isShortened)
-        XCTAssertTrue(compact.contextText.hasSuffix(treeTruncation))
+        XCTAssertTrue(compact.contextText.hasSuffix(treeTruncation + "\n\n" + CapturedContext.closing))
     }
 
     private let treeTruncation = "\n[Accessibility tree shortened to fit compact context; full tree retained in NotchShot.]"
@@ -30,9 +30,10 @@ final class CaptureBatchTests: XCTestCase {
         let batch = CaptureBatch(captures: [first, second], contextStyle: .full)
 
         XCTAssertEqual(batch.contextText,
-                       "# NotchShot — 2 shots · Full context\n\n"
-                       + "--- Shot 1 of 2 ---\nScreenshot: none captured.\n\n" + first.clipboardText
-                       + "\n\n--- Shot 2 of 2 ---\nScreenshot: none captured.\n\n" + second.clipboardText)
+                       "# NotchShot — 2 shots · Full context\n" + CapturedContext.opening + "\n\n"
+                       + "--- Shot 1 of 2 ---\nScreenshot: none captured.\n\n" + first.clipboardBody
+                       + "\n\n--- Shot 2 of 2 ---\nScreenshot: none captured.\n\n" + second.clipboardBody
+                       + "\n\n" + CapturedContext.closing)
         for excluded in [first.accessibilityText, first.ocrText, first.importedText, first.warnings[0]] {
             XCTAssertFalse(batch.contextText.contains(excluded))
         }
@@ -85,7 +86,7 @@ final class CaptureBatchTests: XCTestCase {
         XCTAssertEqual(batch.captures[0].axTree[0].value, capture.axTree[0].value)
         XCTAssertGreaterThan(batch.originalCharacterCount, batch.characterCount)
         let clipboardPrefix = String(section.components(separatedBy: "\n\n")[1].dropLast(treeTruncation.count))
-        XCTAssertTrue(capture.clipboardText.hasPrefix(clipboardPrefix))
+        XCTAssertTrue(capture.clipboardBody.hasPrefix(clipboardPrefix))
     }
 
     func testCompactPreservesRepeatedLinesAndNodesWithinAndAcrossShots() {
@@ -99,8 +100,8 @@ final class CaptureBatchTests: XCTestCase {
         XCTAssertEqual(batch.removedDuplicateLines, 0)
         XCTAssertEqual(batch.contextText.components(separatedBy: line).count - 1, 3)
         XCTAssertTrue(batch.contextText.contains("button Save\nbutton Save"))
-        XCTAssertTrue(batch.contextText.contains(first.clipboardText))
-        XCTAssertTrue(batch.contextText.contains(second.clipboardText))
+        XCTAssertTrue(batch.contextText.contains(first.clipboardBody))
+        XCTAssertTrue(batch.contextText.contains(second.clipboardBody))
         XCTAssertFalse(batch.isShortened)
     }
 
@@ -112,7 +113,7 @@ final class CaptureBatchTests: XCTestCase {
         capture.warnings = ["CAPTURE WARNING"]
         let batch = CaptureBatch(captures: [capture], contextStyle: .compact)
 
-        XCTAssertTrue(batch.contextText.contains(capture.clipboardText))
+        XCTAssertTrue(batch.contextText.contains(capture.clipboardBody))
         for excluded in [capture.accessibilityText, capture.ocrText, capture.importedText, capture.warnings[0]] {
             XCTAssertFalse(batch.contextText.contains(excluded))
         }
@@ -130,8 +131,8 @@ final class CaptureBatchTests: XCTestCase {
         ocr.accessibilityText = "Flat source without a tree"
         for style in BatchContextStyle.allCases {
             let batch = CaptureBatch(captures: [imported, ocr], contextStyle: style)
-            XCTAssertTrue(batch.contextText.contains(imported.clipboardText))
-            XCTAssertTrue(batch.contextText.contains(ocr.clipboardText))
+            XCTAssertTrue(batch.contextText.contains(imported.clipboardBody))
+            XCTAssertTrue(batch.contextText.contains(ocr.clipboardBody))
             XCTAssertEqual(batch.contextText.components(separatedBy: "No accessibility tree was available for this shot.").count - 1, 2)
             for excluded in [imported.importedText, imported.ocrText, ocr.ocrText, ocr.accessibilityText] {
                 XCTAssertFalse(batch.contextText.contains(excluded))
@@ -183,9 +184,9 @@ final class CaptureBatchTests: XCTestCase {
 
     func testShortCompactTreePreservesHierarchyAndProtectedFields() {
         var capture = fixture("Form", text: "Form content")
-        capture.axTree = [AXNode(id: 1, role: "AXGroup", roleDescription: "group", children: [
+        capture.axTree = [AXNode(id: 1, role: "AXGroup", roleDescription: "group", title: "Account", children: [
             AXNode(id: 2, role: "AXButton", roleDescription: "button", title: "Save changes"),
-            AXNode(id: 3, role: "AXGroup", roleDescription: "group", children: [
+            AXNode(id: 3, role: "AXGroup", roleDescription: "group", title: "Links", children: [
                 AXNode(id: 4, role: "AXLink", roleDescription: "link", title: "Documentation", url: "https://example.invalid/docs"),
                 AXNode(id: 5, role: "AXTextField", roleDescription: "text field", title: "secret title", value: "secret value", help: "secret help", url: "secret URL", placeholder: "secret placeholder", isSettable: true, isProtected: true)
             ]),
@@ -193,8 +194,8 @@ final class CaptureBatchTests: XCTestCase {
         ])]
         for style in BatchContextStyle.allCases {
             let batch = CaptureBatch(captures: [capture], contextStyle: style)
-            XCTAssertTrue(batch.contextText.contains(capture.clipboardText))
-            XCTAssertTrue(batch.contextText.contains("group\n\tbutton Save changes\n\tgroup\n\t\tlink Documentation"))
+            XCTAssertTrue(batch.contextText.contains(capture.clipboardBody))
+            XCTAssertTrue(batch.contextText.contains("group Account\n\tbutton Save changes\n\tgroup Links\n\t\tlink Documentation"))
             XCTAssertTrue(batch.contextText.contains("\t\ttext field (settable) [protected]"))
             XCTAssertTrue(batch.contextText.contains("\n\ttext field (settable) Search, Value: Camera"))
             XCTAssertFalse(batch.contextText.contains("secret"))
@@ -213,7 +214,7 @@ final class CaptureBatchTests: XCTestCase {
             let capture = fixture("Empty window", text: "")
             let batch = CaptureBatch(captures: [capture], contextStyle: style)
             XCTAssertTrue(batch.imagePNGs.isEmpty)
-            XCTAssertTrue(batch.contextText.contains(capture.clipboardText))
+            XCTAssertTrue(batch.contextText.contains(capture.clipboardBody))
             XCTAssertFalse(batch.isShortened)
         }
     }
@@ -261,7 +262,7 @@ final class CaptureBatchTests: XCTestCase {
             XCTAssertTrue(batch.contextText.contains("--- Shot 1 of 3 ---\nScreenshot: unavailable; text retained."))
             XCTAssertTrue(batch.contextText.contains("--- Shot 2 of 3 ---\nScreenshot: none captured."))
             XCTAssertTrue(batch.contextText.contains("--- Shot 3 of 3 ---\nScreenshot source: Shot 3."))
-            XCTAssertTrue(batch.contextText.contains(first.clipboardText))
+            XCTAssertTrue(batch.contextText.contains(first.clipboardBody))
         }
     }
 
@@ -271,23 +272,25 @@ final class CaptureBatchTests: XCTestCase {
         capture.importedText = "Imported e\u{301} and 👩🏽‍💻 text\r"
         capture.ocrText = "OCR source"
         capture.warnings = ["A warning\r", "\u{301}A second warning"]
-        capture.axTree = [AXNode(id: 1, role: "AXGroup", roleDescription: "\u{301}group\nnext line", children: [
+        capture.axTree = [AXNode(id: 1, role: "AXGroup", roleDescription: "\u{301}group\nnext line", title: "Form", children: [
             AXNode(id: 2, role: "AXTextField", roleDescription: "field", title: "\u{301}Name\r\nsecond line", value: "value\nnext value", help: "Multiline\nhelp", url: "https://example.invalid", placeholder: "\u{301}placeholder", isSettable: true),
             AXNode(id: 3, role: "AXTextField", roleDescription: "protected field", title: "private", value: "private", isSettable: true, isProtected: true)
-        ]), AXNode(id: 4, role: "AXLink", roleDescription: "link", title: "Name", value: "https://example.invalid", help: "Name", url: "https://example.invalid")]
+        ]), AXNode(id: 5, role: "AXGroup", roleDescription: "group", children: [
+            AXNode(id: 4, role: "AXLink", roleDescription: "link", title: "Name", value: "https://example.invalid", help: "Name", url: "https://example.invalid")
+        ])]
         var noTree = fixture("\u{301}Empty", text: "")
         noTree.windowTitle = "Empty\r\nwindow"
         let full = CaptureBatch(captures: [capture, noTree], contextStyle: .full)
         let compact = CaptureBatch(captures: [capture, noTree], contextStyle: .compact)
         XCTAssertEqual(compact.originalCharacterCount, full.contextText.count)
-        XCTAssertTrue(compact.contextText.contains(capture.clipboardText))
-        XCTAssertTrue(compact.contextText.contains(noTree.clipboardText))
+        XCTAssertTrue(compact.contextText.contains(capture.clipboardBody))
+        XCTAssertTrue(compact.contextText.contains(noTree.clipboardBody))
         XCTAssertFalse(compact.isShortened)
     }
 
     func testCompactRetainsHierarchyPrefixAndMarksUnexaminedLaterNodes() {
         var capture = fixture("Hierarchy", text: "")
-        capture.axTree = [AXNode(id: 1, role: "AXGroup", roleDescription: "group", children: (1...2_000).map {
+        capture.axTree = [AXNode(id: 1, role: "AXGroup", roleDescription: "group", title: "Toolbar", children: (1...2_000).map {
             AXNode(id: $0 + 1, role: "AXButton", roleDescription: "button", title: "Repeated useful label")
         })]
         capture.axTree.append(AXNode(id: 3_000, role: "AXButton", roleDescription: "button", title: "Unique final node"))
@@ -296,8 +299,8 @@ final class CaptureBatchTests: XCTestCase {
         let content = section.components(separatedBy: "\n\n")[1]
         let prefix = String(content.dropLast(treeTruncation.count))
 
-        XCTAssertTrue(capture.clipboardText.hasPrefix(prefix))
-        XCTAssertTrue(prefix.contains("group\n\tbutton Repeated useful label\n\tbutton Repeated useful label"))
+        XCTAssertTrue(capture.clipboardBody.hasPrefix(prefix))
+        XCTAssertTrue(prefix.contains("group Toolbar\n\tbutton Repeated useful label\n\tbutton Repeated useful label"))
         XCTAssertTrue(section.hasSuffix(treeTruncation))
         XCTAssertFalse(section.contains("Unique final node"))
         XCTAssertEqual(batch.removedDuplicateLines, 0)
@@ -312,13 +315,13 @@ final class CaptureBatchTests: XCTestCase {
         capture.axTree[0].value += String(repeating: "x", count: additionalCharacters)
         let exact = CaptureBatch(captures: [capture], contextStyle: .compact)
         XCTAssertEqual(shotSections(exact)[0].count, CaptureBatch.maximumCompactCharactersPerShot)
-        XCTAssertTrue(exact.contextText.contains(capture.clipboardText))
+        XCTAssertTrue(exact.contextText.contains(capture.clipboardBody))
         XCTAssertFalse(exact.isShortened)
 
         capture.axTree.append(AXNode(id: 2, role: "AXButton", roleDescription: "button", title: "One more node"))
         let overflow = CaptureBatch(captures: [capture], contextStyle: .compact)
         XCTAssertEqual(shotSections(overflow)[0].count, CaptureBatch.maximumCompactCharactersPerShot)
-        XCTAssertTrue(overflow.contextText.hasSuffix(treeTruncation))
+        XCTAssertTrue(shotSections(overflow)[0].hasSuffix(treeTruncation))
         XCTAssertTrue(overflow.isShortened)
         XCTAssertFalse(overflow.contextText.contains("One more node"))
     }
@@ -369,7 +372,9 @@ final class CaptureBatchTests: XCTestCase {
     }
 
     private func shotSections(_ batch: CaptureBatch) -> [String] {
-        let sections = batch.contextText.components(separatedBy: "--- Shot ").dropFirst()
+        let closing = "\n\n" + CapturedContext.closing
+        let body = batch.contextText.hasSuffix(closing) ? String(batch.contextText.dropLast(closing.count)) : batch.contextText
+        let sections = body.components(separatedBy: "--- Shot ").dropFirst()
         return sections.enumerated().map { index, value in
             "--- Shot " + (index == sections.count - 1 ? value : String(value.dropLast(2)))
         }

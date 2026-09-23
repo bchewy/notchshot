@@ -67,16 +67,17 @@ struct CaptureBatch: Sendable {
         // multi-megabyte context just to discard it in Compact mode.
         originalCharacterCount = Self.fullCharacterCount(orderedCaptures, unavailableImageIDs: unavailable)
 
-        let header = "# NotchShot — \(orderedCaptures.count) shots · Compact context\n\nAccessibility-tree excerpts. Any shortened content is marked; full trees remain in NotchShot."
+        let header = "# NotchShot — \(orderedCaptures.count) shots · Compact context\n\(CapturedContext.opening)\n\nAccessibility-tree excerpts. Any shortened content is marked; full trees remain in NotchShot."
         let separator = "\n\n"
-        let bodyBudget = Self.maximumCompactCharacters - header.count - separator.count * orderedCaptures.count
+        let bodyBudget = Self.maximumCompactCharacters - header.count - CapturedContext.closing.count
+            - separator.count * (orderedCaptures.count + 1)
         let perShotBudget = min(Self.maximumCompactCharactersPerShot, max(0, bodyBudget / orderedCaptures.count))
         let excerpts = orderedCaptures.enumerated().map {
             Self.compactShot($0.element, index: $0.offset + 1,
                              total: orderedCaptures.count, budget: perShotBudget,
                              unavailableImageIDs: unavailable)
         }
-        contextText = ([header] + excerpts.map(\.text)).joined(separator: separator)
+        contextText = ([header] + excerpts.map(\.text) + [CapturedContext.closing]).joined(separator: separator)
         characterCount = contextText.count
         isShortened = excerpts.contains(where: \.isShortened)
         removedDuplicateLines = 0
@@ -121,9 +122,10 @@ struct CaptureBatch: Sendable {
         let sections = captures.enumerated().map {
             boundary(index: $0.offset + 1, total: captures.count) + "\n"
                 + screenshotNote($0.element, index: $0.offset + 1, unavailableImageIDs: unavailableImageIDs)
-                + "\n\n" + $0.element.clipboardText
+                + "\n\n" + $0.element.clipboardBody
         }
-        return (["# NotchShot — \(captures.count) shots · Full context"] + sections).joined(separator: "\n\n")
+        return (["# NotchShot — \(captures.count) shots · Full context\n" + CapturedContext.opening]
+                + sections + [CapturedContext.closing]).joined(separator: "\n\n")
     }
 
     /// Counts exactly the clipboard payload, including indentation and Unicode
@@ -131,7 +133,7 @@ struct CaptureBatch: Sendable {
     private static func fullCharacterCount(_ captures: [CaptureResult], unavailableImageIDs: Set<UUID>) -> Int {
         guard !captures.isEmpty else { return 0 }
         var counter = CharacterCounter()
-        counter.append("# NotchShot — \(captures.count) shots · Full context")
+        counter.append("# NotchShot — \(captures.count) shots · Full context\n" + CapturedContext.opening)
         for (index, capture) in captures.enumerated() {
             counter.append("\n\n" + boundary(index: index + 1, total: captures.count) + "\n")
             counter.append(screenshotNote(capture, index: index + 1, unavailableImageIDs: unavailableImageIDs))
@@ -142,15 +144,18 @@ struct CaptureBatch: Sendable {
             counter.append("\", App: ")
             counter.append(capture.appName)
             counter.append(".\n")
-            if capture.axTree.isEmpty {
+            let nodes = AXNode.clipboardTree(capture.axTree)
+            if nodes.isEmpty {
                 counter.append("No accessibility tree was available for this shot.")
             } else {
-                _ = visitTree(capture.axTree) { part in
+                if AXNode.containsFrame(nodes) { counter.append(CapturedContext.positionsNote + "\n") }
+                _ = visitTree(nodes) { part in
                     counter.append(part)
                     return true
                 }
             }
         }
+        counter.append("\n\n" + CapturedContext.closing)
         return counter.count
     }
 
@@ -166,7 +171,7 @@ struct CaptureBatch: Sendable {
             first = false
             let indentation = String(repeating: "\t", count: depth)
             guard append(indentation[...]) else { return false }
-            for part in labelParts(node) {
+            for part in AXNode.labelParts(node) {
                 var start = part.startIndex
                 while let newline = part.range(of: "\n", options: .literal, range: start..<part.endIndex) {
                     guard append(part[start..<newline.lowerBound]),
@@ -178,19 +183,6 @@ struct CaptureBatch: Sendable {
             stack.append(contentsOf: node.children.reversed().map { ($0, depth + 1) })
         }
         return true
-    }
-
-    private static func labelParts(_ node: AXNode) -> [String] {
-        var parts = [node.roleDescription.isEmpty ? node.role : node.roleDescription]
-        if node.isSettable { parts.append(" (settable)") }
-        if node.isProtected { return parts + [" [protected]"] }
-        let name = node.title.isEmpty ? node.elementDescription : node.title
-        if !name.isEmpty { parts += [" ", name] }
-        if !node.value.isEmpty && node.value != name { parts += [", Value: ", node.value] }
-        if !node.url.isEmpty && node.url != node.value { parts += [", URL: ", node.url] }
-        if !node.placeholder.isEmpty { parts += [", Placeholder: ", node.placeholder] }
-        if !node.help.isEmpty && node.help != name { parts += [", Help: ", node.help] }
-        return parts
     }
 
     /// Source fields are separated by literal ASCII punctuation or newlines.
@@ -241,12 +233,14 @@ struct CaptureBatch: Sendable {
         if metadataShortened {
             metadata += "[App or window name shortened; full names retained in NotchShot.]\n"
         }
+        let nodes = AXNode.clipboardTree(capture.axTree)
+        if AXNode.containsFrame(nodes) { metadata += CapturedContext.positionsNote + "\n" }
         let treeBudget = max(0, budget - metadata.count)
         var tree = BoundedText(limit: treeBudget)
-        if capture.axTree.isEmpty {
+        if nodes.isEmpty {
             _ = tree.append("No accessibility tree was available for this shot.")
         } else {
-            visitTree(capture.axTree) { tree.append($0) }
+            visitTree(nodes) { tree.append($0) }
         }
         let excerpt = clipped(tree.text, limit: treeBudget,
                               marker: "\n[Accessibility tree shortened to fit compact context; full tree retained in NotchShot.]")
