@@ -6,11 +6,11 @@ import SwiftUI
 struct ApertureMarkView: View {
     @Environment(\.notchTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let state: ApertureState
+    let state: ShutterState
     var expansion: CGFloat = 0
     var isHovered = false
 
-    private var size: CGFloat { 13 + 9 * min(max(expansion, 0), 1) }
+    private var size: CGFloat { NotchMarkView.size(for: expansion) }
     private var turn: Double { state.turn + (isHovered && state == .open ? 22 : 0) }
 
     var body: some View {

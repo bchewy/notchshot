@@ -24,7 +24,7 @@ NotchShot **starts collapsed**. The collapsed window fits the hardware notch plu
 
 ## Colors and appearance
 
-Open **Settings → Appearance** and choose **Mint**, **Sky**, **Lavender**, **Rose**, **Peach**, or **Gold**. The labeled color swatches preview each option; a checkmark shows the selected theme. Changes apply immediately to the aperture, shelf selection, buttons, scrollbar, and floating previews, and the choice is remembered after restarting. Mint is the default. The dark notch background stays consistent with the hardware notch.
+Open **Settings → Appearance** and choose **Mint**, **Sky**, **Lavender**, **Rose**, **Peach**, or **Gold**. The labeled color swatches preview each option; a checkmark shows the selected theme. Changes apply immediately to the notch marks, shelf selection, buttons, scrollbar, and floating previews, and the choice is remembered after restarting. The same section chooses what sits on each side of the notch; see [Notch marks](#notch-marks). Mint is the default. The dark notch background stays consistent with the hardware notch.
 
 ## Following your active screen
 
@@ -32,11 +32,20 @@ Enable **Settings → Display → Follow active screen** to move the notch to th
 
 Moving preserves the shelf, selection, and current page. The notch stays put while you capture, drag, use its keyboard controls, hold a mouse button, open a menu/popover, or choose an export folder. Capture cards land on the notch's current display. Disconnecting that display moves the notch to an available one. Movement uses a brief fade and respects **Reduce Motion**. No additional macOS permission is required.
 
-## Aperture
+## Notch marks
 
-A six-blade aperture in your selected theme color sits in the left notch lane. It closes like a shutter when a capture begins, stays half-closed while the screenshot's text and tree are read, and reopens as the shot joins the shelf. Hovering turns the blades slightly.
+**Settings → Appearance** chooses what sits beside the hardware notch.
 
-The aperture stays inside the existing 16-point collapsed lane and grows with the open strip. Motion is brief and driven by existing capture state, with no idle animation loop; Reduce Motion switches states immediately. The right lane shows how many shots are on the shelf, a spinner while capturing, or the permission indicator when the shelf is empty. The notch dimensions stay the same.
+**Left of the notch** shows a mark in your theme color that follows each capture:
+
+- **Aperture** (default): six blades close like a shutter when a capture begins, stay half-closed while the screenshot's text and tree are read, and reopen as the shot joins the shelf. Hovering turns the blades slightly.
+- **Viewfinder**: corner brackets snap in around a flash, hold closer while text and tree are read, then spring back out.
+- **Camera**: the camera presses in with a flash, and a little print peeks out while the shot is prepared.
+- **None**: an empty lane that still opens and closes the notch.
+
+**Right of the notch** shows **Shot count** (default: how many shots are on the shelf, or the ready dot when it is empty), **Status dot**, or **None**. Whatever you choose, a spinner shows while capturing, and a gray dot shows when Accessibility or Screen Recording is missing, because captures cannot work without them.
+
+Marks stay inside the 16-point collapsed lane and grow with the open strip. Motion is brief and driven by capture state, with no idle animation loop; Reduce Motion switches states immediately. The notch dimensions never change.
 
 ## Copy several shots
 

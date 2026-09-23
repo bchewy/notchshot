@@ -7,7 +7,7 @@ struct NotchRootView: View {
     @Bindable var presentation: NotchPresentation
     var updates: UpdateController?
     @State private var isReviewingBatch = false
-    @State private var isHoveringAperture = false
+    @State private var isHoveringMark = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -56,12 +56,13 @@ struct NotchRootView: View {
         HStack(spacing: 0) {
             Button(action: store.toggleExpanded) {
                 HStack(spacing: 0) {
-                    ApertureMarkView(
+                    NotchMarkView(
+                        mark: store.notchMark,
                         state: .resolve(isCapturing: store.isCapturing,
                                         hasPendingShot: store.pendingCapture != nil,
                                         isLanding: store.isLandingCapture),
                         expansion: presentation.progress,
-                        isHovered: isHoveringAperture
+                        isHovered: isHoveringMark
                     )
                         .frame(width: stripWingWidth)
                     Color.clear.frame(width: store.notchWidth)
@@ -70,23 +71,27 @@ struct NotchRootView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .onHover { isHoveringAperture = $0 }
+            .onHover { isHoveringMark = $0 }
             .accessibilityLabel(store.isExpanded ? "Collapse NotchShot" : "Open NotchShot")
             .help(store.isExpanded ? "Collapse" : "Open shot shelf · \(store.captureHintHelp)")
 
             // The right lane only reports; clearing lives in the open shelf.
             Button(action: store.toggleExpanded) {
                 Group {
-                    if store.isCapturing {
+                    switch store.notchIndicator.content(isCapturing: store.isCapturing, shotCount: store.captures.count,
+                                                        permissionsReady: store.accessibilityGranted && store.screenRecordingGranted) {
+                    case .progress:
                         ProgressView().controlSize(.mini).scaleEffect(0.55 + 0.15 * presentation.progress)
-                    } else if !store.captures.isEmpty {
-                        Text(store.captures.count, format: .number)
+                    case .count(let count):
+                        Text(count, format: .number)
                             .font(.system(size: 10 + 2 * presentation.progress, weight: .semibold, design: .rounded).monospacedDigit())
                             .foregroundStyle(store.theme.accent)
-                    } else {
+                    case .dot(let ready):
                         Circle()
-                            .fill(store.accessibilityGranted && store.screenRecordingGranted ? store.theme.accent : Color.white.opacity(0.42))
+                            .fill(ready ? store.theme.accent : Color.white.opacity(0.42))
                             .frame(width: 4 + presentation.progress, height: 4 + presentation.progress)
+                    case .nothing:
+                        Color.clear
                     }
                 }
                 .frame(width: stripWingWidth, height: stripHeight)

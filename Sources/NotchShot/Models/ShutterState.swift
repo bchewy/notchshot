@@ -3,7 +3,7 @@ import Foundation
 
 /// A read-only reflection of capture progress. Decoration never owns the
 /// screenshot, its flight, or the shelf's open/close timing.
-enum ApertureState: CaseIterable {
+enum ShutterState: CaseIterable {
     /// Waiting to capture.
     case open
     /// Capturing: the blades close like a shutter.
@@ -19,7 +19,10 @@ enum ApertureState: CaseIterable {
         if hasPendingShot { return .half }
         return isCapturing ? .shut : .open
     }
+}
 
+/// Aperture geometry for each state; the other marks read the state directly.
+extension ShutterState {
     /// 0 is closed to a pinhole; 1 is wide open.
     var opening: CGFloat {
         switch self {

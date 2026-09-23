@@ -61,6 +61,12 @@ final class CaptureStore {
     var theme: NotchTheme {
         didSet { preferences.set(theme.rawValue, forKey: "notchTheme") }
     }
+    var notchMark: NotchMark {
+        didSet { preferences.set(notchMark.rawValue, forKey: "notchMark") }
+    }
+    var notchIndicator: NotchIndicator {
+        didSet { preferences.set(notchIndicator.rawValue, forKey: "notchIndicator") }
+    }
     var followActiveScreen: Bool {
         didSet { preferences.set(followActiveScreen, forKey: "followActiveScreen") }
     }
@@ -253,6 +259,8 @@ final class CaptureStore {
             .flatMap(BatchContextStyle.init(rawValue:)) ?? .compact
         theme = preferences.string(forKey: "notchTheme")
             .flatMap(NotchTheme.init(rawValue:)) ?? .mint
+        notchMark = preferences.string(forKey: "notchMark").flatMap(NotchMark.init(rawValue:)) ?? .aperture
+        notchIndicator = preferences.string(forKey: "notchIndicator").flatMap(NotchIndicator.init(rawValue:)) ?? .shotCount
         followActiveScreen = preferences.object(forKey: "followActiveScreen") as? Bool ?? false
         captureShortcut = CaptureShortcut.load(from: preferences)
         // Preserve whether the optional gesture was enabled during upgrades,
