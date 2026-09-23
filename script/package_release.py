@@ -3,6 +3,7 @@
 """Package a clean, certificate-signed release without building or installing it."""
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -160,12 +161,16 @@ def dmgbuild_python():
     requirements = DMG_DIRECTORY / "requirements.txt"
     python = DMG_TOOLS / "bin/python3"
     installed = DMG_TOOLS / "requirements.txt"
-    if not (python.exists() and installed.exists() and installed.read_bytes() == requirements.read_bytes()):
-        shutil.rmtree(DMG_TOOLS, ignore_errors=True)
-        run(sys.executable, "-m", "venv", str(DMG_TOOLS))
-        run(str(python), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--require-hashes",
-            "--only-binary=:all:", "--no-deps", "-r", str(requirements))
-        shutil.copyfile(requirements, installed)
+    DMG_TOOLS.parent.mkdir(parents=True, exist_ok=True)
+    # Packagers sharing a checkout set the environment up one at a time.
+    with open(DMG_TOOLS.parent / ".dmg-tools.lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not (python.exists() and installed.exists() and installed.read_bytes() == requirements.read_bytes()):
+            shutil.rmtree(DMG_TOOLS, ignore_errors=True)
+            run(sys.executable, "-m", "venv", str(DMG_TOOLS))
+            run(str(python), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--require-hashes",
+                "--only-binary=:all:", "--no-deps", "-r", str(requirements))
+            shutil.copyfile(requirements, installed)
     return python
 
 
