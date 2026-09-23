@@ -5,125 +5,148 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#101311" />
+    <meta name="theme-color" content="#0b0e0c" />
     <title>NotchShot — A little context. From any app.</title>
     <meta
       name="description"
-      content="Capture an app's screenshot, text and accessibility context. Keep your shots in a tiny Mac notch shelf, then copy them together."
+      content="Capture an app's screenshot, text and accessibility tree. Keep your shots in a tiny Mac notch shelf, search them later, and copy them into your next conversation."
     />
-    <meta
-      property="og:title"
-      content="NotchShot — A little context. From any app."
-    />
+    <meta property="og:title" content="NotchShot — A little context. From any app." />
     <meta
       property="og:description"
-      content="Screenshots and app context, together in your Mac's notch. Watch the demo and try the early preview."
+      content="Screenshots and the whole accessibility tree, together in your Mac's notch. Free, open source, and on-device."
     />
     <meta property="og:type" content="website" />
     <link
       rel="icon"
       type="image/svg+xml"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23101311'/%3E%3Cpath d='M12 7H9a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M7 20v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3' fill='none' stroke='%239febcd' stroke-width='2.5' stroke-linecap='round'/%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%230b0e0c'/%3E%3Cg transform='translate(5 5) scale(.6875)'%3E%3Cpath fill='%238ae8c4' fill-rule='evenodd' d='M1 16a15 15 0 1 0 30 0a15 15 0 1 0 -30 0ZM16 8.88L22.16 12.44L22.16 19.56L16 23.12L9.84 19.56L9.84 12.44Z'/%3E%3Cpath stroke='%230b0e0c' stroke-width='1.8' stroke-linecap='round' d='M22.16 12.44L30.92 17.5M22.16 19.56L22.16 29.68M16 23.12L7.24 28.17M9.84 19.56L1.08 14.5M9.84 12.44L9.84 2.32M16 8.88L24.76 3.83'/%3E%3C/g%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="/style.css?v=scroll-20260920" />
+    <link rel="stylesheet" href="/style.css?v=0.7.0-2" />
+    <script>
+      document.documentElement.classList.add("js");
+      // If the site script cannot run, show everything rather than hidden reveals.
+      setTimeout(function () {
+        if (!window.__notchshotReady) document.documentElement.classList.remove("js");
+      }, 2500);
+    </script>
   </head>
   <body>
     <a class="skip" href="#main">Skip to content</a>
-    <header class="site-header page">
-      <a class="brand" href="/" aria-label="NotchShot home">
-        <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true">
-          <path
-            d="M12 7H9a2 2 0 0 0-2 2v3m13-5h3a2 2 0 0 1 2 2v3M7 20v3a2 2 0 0 0 2 2h3m13-5v3a2 2 0 0 1-2 2h-3"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2.5"
-            stroke-linecap="round"
-          />
-        </svg>
-        <span>NotchShot</span>
-      </a>
-      <nav aria-label="Main navigation">
-        <a href="https://github.com/bchewy/notchshot"
-          >GitHub <span aria-hidden="true">↗</span></a
-        ><a
-          class="header-download"
-          href="/downloads/NotchShot-0.6.0.zip"
-          download
-          >Get the app <span aria-hidden="true">↓</span></a
-        >
-      </nav>
-    </header>
-    <main id="main">
-      <section class="intro page" aria-labelledby="headline">
-        <p class="eyebrow">
-          <span class="status-dot"></span> A small app for your Mac
-        </p>
-        <h1 id="headline">A little context.<br /><span>From any app.</span></h1>
-        <p class="lede">
-          The screenshot. The text. The little details.<br
-            class="desktop-break"
-          />
-          Keep them together in your notch, ready for your next conversation.
-        </p>
-        <div class="actions">
-          <a class="download" href="/downloads/NotchShot-0.6.0.zip" download
-            ><svg
-              width="19"
-              height="19"
-              viewBox="0 0 24 24"
-              fill="none"
-              aria-hidden="true"
-            >
-              <path
-                d="M12 3v12m-4-4 4 4 4-4M5 17v3h14v-3"
-                stroke="currentColor"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              /></svg
-            >Download for macOS</a
-          >
-          <a class="watch" href="#demo"
-            >Watch it in action <span aria-hidden="true">↗</span></a
-          >
-        </div>
-        <p class="requirements">
-          Preview 0.6.0 <span>·</span> Apple silicon <span>·</span> macOS 15+
-        </p>
-        <a class="scroll-invite" href="#story"
-          >A whole window. One little notch.
-          <span aria-hidden="true">↓</span></a
-        >
-      </section>
+    <div class="scroll-progress" aria-hidden="true"><i></i></div>
+    <div class="grain" aria-hidden="true"></div>
 
-      <section
-        class="scroll-story"
-        id="story"
-        aria-labelledby="story-heading"
-        aria-describedby="story-description"
-      >
-        <h2 id="story-heading" class="sr-only">
-          From your window to your notch
-        </h2>
-        <p id="story-description" class="sr-only">
-          An illustrative demo: press left Shift and right Shift together to
-          capture an app. Its screenshot becomes a card, then moves into the
-          notch shelf. Copy the screenshot and accessibility tree together, or
-          choose just one in Settings.
-        </p>
-        <div class="story-sticky">
-          <div class="story-topline page">
-            <span class="eyebrow">A LITTLE WALKTHROUGH</span
-            ><a href="#demo"
-              >Skip to the real demo <span aria-hidden="true">↓</span></a
+    <header class="site-header">
+      <div class="page header-inner">
+        <a class="brand" href="/" aria-label="NotchShot home">
+          <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+            <path
+              fill="currentColor"
+              fill-rule="evenodd"
+              d="M1 16a15 15 0 1 0 30 0a15 15 0 1 0 -30 0ZM16 8.88L22.16 12.44L22.16 19.56L16 23.12L9.84 19.56L9.84 12.44Z"
+            />
+            <path
+              stroke="var(--bg)"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              d="M22.16 12.44L30.92 17.5M22.16 19.56L22.16 29.68M16 23.12L7.24 28.17M9.84 19.56L1.08 14.5M9.84 12.44L9.84 2.32M16 8.88L24.76 3.83"
+            />
+          </svg>
+          <span>NotchShot</span>
+        </a>
+        <nav aria-label="Main navigation">
+          <a class="nav-link" href="#story">How it works</a>
+          <a class="nav-link" href="#features">Features</a>
+          <a class="nav-link" href="https://github.com/bchewy/notchshot"
+            >GitHub <span aria-hidden="true">↗</span></a
+          >
+          <a
+            class="header-download magnetic"
+            href="https://github.com/bchewy/notchshot/releases/download/v0.7.0/NotchShot-0.7.0.zip"
+            ><span>Get the app</span> <span aria-hidden="true">↓</span></a
+          >
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero" aria-labelledby="headline">
+        <div class="hero-glow" aria-hidden="true"></div>
+        <div class="page hero-inner">
+          <a class="release-pill reveal-up" href="https://github.com/bchewy/notchshot/releases/tag/v0.7.0">
+            <span class="pill-tag">New in 0.7</span>
+            <span>Updates itself, quietly</span>
+            <span aria-hidden="true">→</span>
+          </a>
+          <h1 id="headline" class="display">
+            <span class="line"><span>A little context.</span></span>
+            <span class="line"><span>From <em>any</em> app.</span></span>
+          </h1>
+          <p class="lede reveal-up">
+            The screenshot, the text, and every control in the window, kept together
+            in your notch and ready for your next conversation.
+          </p>
+          <div class="actions reveal-up">
+            <a
+              class="download magnetic"
+              href="https://github.com/bchewy/notchshot/releases/download/v0.7.0/NotchShot-0.7.0.zip"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M12 3v12m-4-4 4 4 4-4M5 17v3h14v-3"
+                  stroke="currentColor"
+                  stroke-width="1.9"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <span>Download for macOS</span>
+            </a>
+            <a class="text-link" href="#film"
+              ><span>Watch the film</span> <span aria-hidden="true">↗</span></a
             >
           </div>
+          <p class="requirements reveal-up">
+            Free &amp; open source <span>·</span> 0.7.0 <span>·</span> Apple silicon
+            <span>·</span> macOS 15+
+          </p>
+        </div>
+        <a class="scroll-cue" href="#story" aria-label="Scroll to the walkthrough"><i aria-hidden="true"></i></a>
+      </section>
+
+      <section class="story" id="story" aria-labelledby="story-heading" aria-describedby="story-description">
+        <h2 id="story-heading" class="sr-only">From your window to your notch</h2>
+        <p id="story-description" class="sr-only">
+          An illustrative walkthrough. Press left Shift and right Shift together to capture
+          an app; the aperture in the notch closes like a shutter. The window becomes a
+          card, and its accessibility tree comes with it. The card flies into the notch
+          shelf, ready to copy. With history on, you can search every shot later.
+        </p>
+        <div class="story-sticky">
+          <div class="page story-captions" aria-hidden="true">
+            <div class="caption is-active" data-chapter="0">
+              <h3>Press <kbd>⇧</kbd> <kbd>⇧</kbd></h3>
+              <p class="caption-body">Both Shift keys at once. The aperture in your notch closes like a shutter.</p>
+            </div>
+            <div class="caption" data-chapter="1">
+              <h3>The context comes, <em>too.</em></h3>
+              <p class="caption-body">Not just pixels: the text and every control, straight from the window’s accessibility tree.</p>
+            </div>
+            <div class="caption" data-chapter="2">
+              <h3>Into the <em>notch.</em></h3>
+              <p class="caption-body">Your shot lands on a tiny shelf, one hover away from your next conversation.</p>
+            </div>
+            <div class="caption" data-chapter="3">
+              <h3>And back <em>again.</em></h3>
+              <p class="caption-body">Turn on history to search every shot you’ve taken. It never leaves your Mac.</p>
+            </div>
+          </div>
+
           <div class="scene-wrap">
             <div class="mac-scene" aria-hidden="true">
               <div class="desktop-menu">
-                <span class="menu-apple">●</span><strong>Notes</strong
-                ><span>File</span><span>Edit</span><span>View</span
-                ><span class="menu-time">Sun 9:41</span>
+                <span class="menu-apple">●</span><strong>Notes</strong><span>File</span><span>Edit</span
+                ><span>View</span><span class="menu-time">Sun 9:41</span>
               </div>
               <div class="desktop-label"><span>your screen</span><i></i></div>
               <div class="notch-shell">
@@ -135,20 +158,25 @@
                         <stop offset="1" stop-color="#8ae8c4" />
                       </linearGradient>
                     </defs>
-                    <path fill="url(#aperture-fill)" fill-rule="evenodd" d="M1 16a15 15 0 1 0 30 0a15 15 0 1 0 -30 0ZM16 8.88L22.16 12.44L22.16 19.56L16 23.12L9.84 19.56L9.84 12.44Z" />
                     <path
+                      class="aperture-blades"
+                      fill="url(#aperture-fill)"
+                      fill-rule="evenodd"
+                      d="M1 16a15 15 0 1 0 30 0a15 15 0 1 0 -30 0ZM16 8.88L22.16 12.44L22.16 19.56L16 23.12L9.84 19.56L9.84 12.44Z"
+                    />
+                    <path
+                      class="aperture-seams"
                       stroke="#0b120e"
                       stroke-opacity="0.6"
                       stroke-width="1.5"
                       stroke-linecap="round"
                       d="M22.16 12.44L30.92 17.5M22.16 19.56L22.16 29.68M16 23.12L7.24 28.17M9.84 19.56L1.08 14.5M9.84 12.44L9.84 2.32M16 8.88L24.76 3.83"
                     /></svg
-                  ><span class="notch-camera"></span
-                  ><span class="shelf-count">1</span>
+                  ><span class="notch-camera"></span><span class="shelf-count">1</span>
                 </div>
                 <div class="shelf-ui">
                   <div class="shelf-heading">
-                    <strong>NotchShot</strong><span>● ON DEVICE</span
+                    <strong>NotchShot</strong><span class="device-pill">● ON DEVICE</span
                     ><svg class="shelf-clear" viewBox="0 0 24 24" fill="none">
                       <path
                         d="M5 6h14M9 6V3h6v3M7 6l1 15h8l1-15M10 10v7m4-7v7"
@@ -156,40 +184,59 @@
                         stroke-width="1.6"
                         stroke-linecap="round"
                       /></svg
-                    ><span class="shelf-gear">⚙</span><span>⌃</span>
+                    ><span class="shelf-gear">◷</span><span class="shelf-gear">⚙</span><span>⌃</span>
                   </div>
-                  <div class="shelf-tray-heading">
-                    <span>SHOT SHELF <b>1</b></span
-                    ><span>Select</span>
-                  </div>
+                  <div class="shelf-tray-heading"><span>SHOT SHELF <b>1</b></span><span>Select</span></div>
                   <div class="shelf-tray">
-                    <div class="landing-slot">
-                      <span class="slot-app">Notes</span>
-                    </div>
+                    <div class="landing-slot"><span class="slot-app">Notes</span></div>
                     <div class="shelf-context">
-                      <strong>A weekend, unwritten.</strong
-                      ><span>Screenshot + AX tree</span
+                      <strong>A weekend, unwritten.</strong><span>Screenshot + AX tree</span
                       ><span class="ready-label">✓ Ready to copy</span>
                     </div>
                   </div>
-                  <div class="shelf-bottom">
-                    <span>⇧ + ⇧ to capture</span><span>Hover to preview</span>
+                  <div class="shelf-bottom"><span>⇧ + ⇧ to capture</span><span>Hover to preview</span></div>
+                </div>
+                <div class="history-ui">
+                  <div class="shelf-heading history-heading">
+                    <span class="history-back">‹</span><strong>History</strong><span class="device-pill">● ON DEVICE</span
+                    ><span>⌃</span>
                   </div>
+                  <div class="history-search">
+                    <span class="history-glass">⌕</span><span class="history-query"></span><i class="history-caret"></i
+                    ><span class="history-placeholder">Search shots</span>
+                  </div>
+                  <ul class="history-rows">
+                    <li class="history-row is-match">
+                      <span class="history-thumb notes"></span>
+                      <span class="history-text"
+                        ><strong>A weekend, unwritten.</strong
+                        ><span>Notes · just now · “Find a new <mark>coffee</mark> spot”</span></span
+                      >
+                      <span class="history-pin">⌖</span>
+                    </li>
+                    <li class="history-row">
+                      <span class="history-thumb browser"></span>
+                      <span class="history-text"><strong>Pull request #9</strong><span>Safari · 2 hours ago</span></span>
+                      <span class="history-pin">⌖</span>
+                    </li>
+                    <li class="history-row">
+                      <span class="history-thumb design"></span>
+                      <span class="history-text"><strong>Notch marks — explorations</strong><span>Figma · yesterday</span></span>
+                      <span class="history-pin">⌖</span>
+                    </li>
+                  </ul>
                 </div>
               </div>
               <div class="window-shadow"></div>
               <div class="app-window">
                 <div class="window-chrome">
                   <div class="traffic-lights"><i></i><i></i><i></i></div>
-                  <span>Notes</span
-                  ><span class="window-toolbar">◧ &nbsp; ⌕ &nbsp; ⋯</span>
+                  <span>Notes</span><span class="window-toolbar">◧ &nbsp; ⌕ &nbsp; ⋯</span>
                 </div>
                 <div class="window-body">
                   <aside class="notes-sidebar">
                     <span class="sidebar-title">Your little corner</span>
-                    <div class="folder active">
-                      <span>▤</span> All notes <b>8</b>
-                    </div>
+                    <div class="folder active"><span>▤</span> All notes <b>8</b></div>
                     <div class="folder"><span>♡</span> Good ideas <b>3</b></div>
                     <div class="folder"><span>☀</span> For later <b>5</b></div>
                     <div class="sidebar-bottom">A little room to think.</div>
@@ -197,16 +244,10 @@
                   <div class="note-page">
                     <div class="note-date">SUNDAY, AT YOUR OWN PACE</div>
                     <h3>A weekend,<br />unwritten.</h3>
-                    <p>
-                      No itinerary. Just a few good things<br />to keep in mind.
-                    </p>
+                    <p>No itinerary. Just a few good things<br />to keep in mind.</p>
                     <div class="note-rule"></div>
-                    <div class="note-check">
-                      <span>✓</span> Find a new coffee spot
-                    </div>
-                    <div class="note-check">
-                      <span></span> Take the long way home
-                    </div>
+                    <div class="note-check"><span>✓</span> Find a new coffee spot</div>
+                    <div class="note-check"><span></span> Take the long way home</div>
                     <div class="note-check"><span></span> Bring the camera</div>
                     <div class="note-sticker">
                       <svg viewBox="0 0 80 66">
@@ -216,27 +257,9 @@
                           stroke="currentColor"
                           stroke-width="2"
                         />
-                        <circle
-                          cx="42"
-                          cy="37"
-                          r="15"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="2"
-                        />
-                        <circle
-                          cx="42"
-                          cy="37"
-                          r="9"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="1.5"
-                        />
-                        <path
-                          d="M14 25h8"
-                          stroke="currentColor"
-                          stroke-width="2"
-                        /></svg
+                        <circle cx="42" cy="37" r="15" fill="none" stroke="currentColor" stroke-width="2" />
+                        <circle cx="42" cy="37" r="9" fill="none" stroke="currentColor" stroke-width="1.5" />
+                        <path d="M14 25h8" stroke="currentColor" stroke-width="2" /></svg
                       ><span>less planning,<br />more noticing.</span>
                     </div>
                   </div>
@@ -244,150 +267,227 @@
                 <div class="capture-flash"></div>
                 <div class="capture-border"></div>
               </div>
-              <div class="capture-hint">
-                <kbd>⇧</kbd><span>+</span><kbd>⇧</kbd
-                ><span>and it’s a shot.</span>
+              <div class="ax-panel">
+                <div class="ax-heading"><span>Accessibility tree</span><b>42 elements</b></div>
+                <ol class="ax-lines">
+                  <li><i>window</i> “Notes”</li>
+                  <li><u>├</u> <i>group</i> “Your little corner”</li>
+                  <li><u>│ ├</u> <i>row</i> “All notes” <s>8</s></li>
+                  <li><u>│ └</u> <i>row</i> “Good ideas” <s>3</s></li>
+                  <li><u>├</u> <i>heading</i> “A weekend, unwritten.”</li>
+                  <li><u>├</u> <i>text</i> “No itinerary. Just a few good…”</li>
+                  <li><u>├</u> <i>checkbox</i> “Find a new coffee spot” <s>✓</s></li>
+                  <li><u>├</u> <i>checkbox</i> “Take the long way home”</li>
+                  <li><u>└</u> <i>checkbox</i> “Bring the camera”</li>
+                </ol>
               </div>
-              <div class="context-tag">
-                <span class="context-icon">≡</span>
-                <div>
-                  <strong>The context comes, too.</strong
-                  ><span>Screenshot + accessibility tree</span>
-                </div>
-                <span class="context-check">✓</span>
+              <div class="capture-hint">
+                <kbd>⇧</kbd><span>+</span><kbd>⇧</kbd><span>and it’s a shot.</span>
               </div>
               <div class="arrival-message">
-                <span class="eyebrow">CAPTURED. COLLECTED. CLOSE BY.</span>
                 <h3>A whole window.<br />A little <em>notch.</em></h3>
-                <p>Ready to copy into your next conversation.</p>
               </div>
             </div>
             <div class="scene-edge"></div>
           </div>
-          <div class="story-controls page">
-            <ol class="story-steps" aria-label="Capture steps">
-              <li>
-                <button type="button" data-step="0" disabled>
-                  <span>01</span> Capture
-                </button>
-              </li>
-              <li>
-                <button type="button" data-step="1" disabled>
-                  <span>02</span> Keep the context
-                </button>
-              </li>
-              <li>
-                <button type="button" data-step="2" disabled>
-                  <span>03</span> Tuck it away
-                </button>
-              </li>
+
+          <div class="page story-rail">
+            <ol class="rail" aria-label="Walkthrough chapters">
+              <li><button type="button" data-step="0"><span>01</span> Capture<i><b></b></i></button></li>
+              <li><button type="button" data-step="1"><span>02</span> Context<i><b></b></i></button></li>
+              <li><button type="button" data-step="2"><span>03</span> Notch<i><b></b></i></button></li>
+              <li><button type="button" data-step="3"><span>04</span> History<i><b></b></i></button></li>
             </ol>
-            <p class="story-scroll-label">
-              Scroll to see it happen <span aria-hidden="true">↓</span>
-            </p>
+            <a class="rail-skip" href="#film">Skip to the film <span aria-hidden="true">↓</span></a>
           </div>
         </div>
       </section>
 
-      <section class="real-demo page" id="demo" aria-labelledby="demo-heading">
-        <div class="section-heading">
-          <div>
-            <p class="eyebrow">THE REAL THING</p>
-            <h2 id="demo-heading">Small app. <span>See for yourself.</span></h2>
+      <section class="marquee" aria-label="Works with the apps you already use">
+        <div class="marquee-track" aria-hidden="true">
+          <div class="marquee-row">
+            <span class="app"><img src="/assets/apps/safari.webp" alt="" width="256" height="256" loading="lazy" decoding="async" /><span>Safari</span></span>
+            <span class="app outline"><img src="/assets/apps/xcode.webp" alt="" width="256" height="256" loading="lazy" decoding="async" /><span>Xcode</span></span>
+            <span class="app"><img src="/assets/apps/figma.webp" alt="" width="256" height="256" loading="lazy" decoding="async" /><span>Figma</span></span>
+            <span class="app outline"><img src="/assets/apps/notes.webp" alt="" width="256" height="256" loading="lazy" decoding="async" /><span>Notes</span></span>
+            <span class="app"><img src="/assets/apps/linear.webp" alt="" width="256" height="256" loading="lazy" decoding="async" /><span>Linear</span></span>
+            <span class="app outline"><img src="/assets/apps/terminal.webp" alt="" width="256" height="256" loading="lazy" decoding="async" /><span>Terminal</span></span>
+            <span class="app"><img src="/assets/apps/slack.webp" alt="" width="256" height="256" loading="lazy" decoding="async" /><span>Slack</span></span>
+            <span class="app outline"><img src="/assets/apps/notion.webp" alt="" width="256" height="256" loading="lazy" decoding="async" /><span>Notion</span></span>
+            <span class="app"><img src="/assets/apps/mail.webp" alt="" width="256" height="256" loading="lazy" decoding="async" /><span>Mail</span></span>
+            <span class="app outline"><img src="/assets/apps/finder.webp" alt="" width="256" height="256" loading="lazy" decoding="async" /><span>Finder</span></span>
           </div>
-          <p>
-            A quick look at capturing, collecting<br />and copying from your
-            shelf.
-          </p>
         </div>
-        <figure class="demo">
-          <video
-            controls
-            playsinline
-            preload="none"
-            poster="/assets/demo-poster.jpg"
-            width="1664"
-            height="1080"
-            aria-label="NotchShot demo: capture apps, collect shots in the shelf, then copy and paste them together"
-            aria-describedby="demo-description"
-          >
-            <source src="/assets/notchshot-demo.mp4" type="video/mp4" />
-            Your browser doesn’t support this video.
-            <a href="/assets/notchshot-demo.mp4">Download the demo</a>.
-          </video>
-          <figcaption>
-            <span>Capture. Collect. Copy.</span
-            ><span>1 min 22 sec <span aria-hidden="true">↗</span></span>
-          </figcaption>
-          <p id="demo-description" class="sr-only">
-            The recording shows an earlier preview capturing a browser, Notion
-            and a coding app, hovering to preview shots, selecting several
-            shots, and pasting their screenshots and context into a
-            conversation. The current preview defaults to screenshot and
-            accessibility tree.
+      </section>
+
+      <section class="features page" id="features" aria-labelledby="features-heading">
+        <div class="section-head">
+          <h2 id="features-heading" class="section-title">
+            Small app.<br /><em>Thoughtful</em> details.
+          </h2>
+        </div>
+        <div class="bento">
+          <article class="card card-custom reveal">
+            <div class="card-copy">
+              <h3>Make the notch yours.</h3>
+              <p>Six colors and three marks. Try them. Every mark closes like a shutter when you capture.</p>
+            </div>
+            <div class="custom-demo">
+              <div class="demo-notch" data-mark="aperture">
+                <span class="demo-mark"></span><span class="demo-camera"></span><span class="demo-count">2</span>
+              </div>
+              <div class="custom-controls">
+                <div class="mark-picker" role="group" aria-label="Notch mark">
+                  <button type="button" data-mark="aperture" aria-pressed="true">Aperture</button>
+                  <button type="button" data-mark="viewfinder" aria-pressed="false">Viewfinder</button>
+                  <button type="button" data-mark="camera" aria-pressed="false">Camera</button>
+                </div>
+                <div class="swatches" role="group" aria-label="Theme color">
+                  <button type="button" data-theme="mint" aria-label="Mint" aria-pressed="true"></button>
+                  <button type="button" data-theme="sky" aria-label="Sky" aria-pressed="false"></button>
+                  <button type="button" data-theme="lavender" aria-label="Lavender" aria-pressed="false"></button>
+                  <button type="button" data-theme="rose" aria-label="Rose" aria-pressed="false"></button>
+                  <button type="button" data-theme="peach" aria-label="Peach" aria-pressed="false"></button>
+                  <button type="button" data-theme="gold" aria-label="Gold" aria-pressed="false"></button>
+                </div>
+                <button type="button" class="try-capture">Take a shot <kbd>⇧</kbd><kbd>⇧</kbd></button>
+              </div>
+            </div>
+          </article>
+
+          <article class="card card-history reveal">
+            <div class="card-copy">
+              <h3>Search every shot.</h3>
+              <p>Optional, saved only on this Mac. Pin the ones worth keeping.</p>
+            </div>
+            <div class="mini-history" aria-hidden="true">
+              <div class="mini-search"><span>⌕</span><span class="mini-query"></span><i></i></div>
+              <ul>
+                <li data-words="coffee weekend notes"><b class="t-notes"></b><span>A weekend, unwritten.<small>Notes · now</small></span></li>
+                <li data-words="release pull request safari"><b class="t-browser"></b><span>Pull request #9<small>Safari · 2h</small></span></li>
+                <li data-words="invoice march mail"><b class="t-mail"></b><span>Invoice — March<small>Mail · Mon</small></span></li>
+                <li data-words="notch marks figma"><b class="t-design"></b><span>Notch marks<small>Figma · Sun</small></span></li>
+              </ul>
+            </div>
+          </article>
+
+          <article class="card card-context reveal">
+            <h3>The whole window, not a guess.</h3>
+            <p>Screenshot and accessibility tree together, or either one on its own.</p>
+            <div class="mini-tree" aria-hidden="true">
+              <span><i>button</i> “Merge pull request”</span>
+              <span><i>link</i> “Files changed” <s>12</s></span>
+              <span><i>text</i> “All checks have passed”</span>
+            </div>
+          </article>
+
+          <article class="card card-updates reveal">
+            <h3>Stays current, <em>quietly.</em></h3>
+            <p>Stable or nightly. Every update is signature-checked before it can run.</p>
+            <div class="update-demo" aria-hidden="true">
+              <span class="channel"><b>Stable</b><span>Nightly</span></span>
+              <span class="verified"><svg viewBox="0 0 20 20"><path d="M5 10.5l3.2 3.2L15 7" /></svg>0.7.0 verified</span>
+            </div>
+          </article>
+
+          <article class="card card-local reveal">
+            <h3>No account. No cloud.</h3>
+            <p>Capture and text recognition run on your Mac. Your shots stay here.</p>
+            <div class="local-demo" aria-hidden="true"><span>ON DEVICE</span></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="film page" id="film" aria-labelledby="film-heading">
+        <div class="section-head split">
+          <div>
+            <h2 id="film-heading" class="section-title">See it <em>for yourself.</em></h2>
+          </div>
+          <p class="section-note">A quick look at capturing, collecting, and copying from your shelf.</p>
+        </div>
+        <figure class="film-frame">
+          <div class="film-scale">
+            <video
+              controls
+              playsinline
+              preload="none"
+              poster="/assets/demo-poster.jpg"
+              width="1664"
+              height="1080"
+              aria-label="NotchShot demo: capture apps, collect shots in the shelf, then copy and paste them together"
+              aria-describedby="film-description"
+            >
+              <source src="/assets/notchshot-demo.mp4" type="video/mp4" />
+              Your browser doesn’t support this video.
+              <a href="/assets/notchshot-demo.mp4">Download the demo</a>.
+            </video>
+            <button type="button" class="film-play" aria-label="Play the demo film, 1 minute 22 seconds">
+              <span class="film-play-icon" aria-hidden="true"></span><span>Play the film</span><small>1:22</small>
+            </button>
+          </div>
+          <figcaption><span>Capture. Collect. Copy.</span><span>Recorded on an earlier preview</span></figcaption>
+          <p id="film-description" class="sr-only">
+            The recording shows an earlier preview capturing a browser, Notion and a coding
+            app, hovering to preview shots, selecting several shots, and pasting their
+            screenshots and context into a conversation.
           </p>
         </figure>
       </section>
-      <section class="details page" aria-label="A little more about NotchShot">
-        <div class="details-title">
-          <p class="eyebrow">LESS FUSS. MORE CONTEXT.</p>
-          <h2>At home <br />on your Mac.</h2>
-        </div>
-        <dl>
-          <div>
-            <dt>More than a screenshot.</dt>
-            <dd>
-              Keep the screenshot and accessibility tree together. Or copy just
-              the image or tree. Your choice.
-            </dd>
+
+      <section class="closing" aria-labelledby="closing-heading">
+        <div class="closing-glow" aria-hidden="true"></div>
+        <div class="page closing-inner">
+          <h2 id="closing-heading" class="display closing-title">
+            <span class="line"><span>Give your notch</span></span>
+            <span class="line"><span><em>something</em> to do.</span></span>
+          </h2>
+          <div class="actions">
+            <a
+              class="download magnetic"
+              href="https://github.com/bchewy/notchshot/releases/download/v0.7.0/NotchShot-0.7.0.zip"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path
+                  d="M12 3v12m-4-4 4 4 4-4M5 17v3h14v-3"
+                  stroke="currentColor"
+                  stroke-width="1.9"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <span>Download NotchShot 0.7.0</span>
+            </a>
+            <a class="text-link" href="https://github.com/bchewy/notchshot"
+              ><span>Star on GitHub</span> <span aria-hidden="true">↗</span></a
+            >
           </div>
-          <div>
-            <dt>Your shelf, your way.</dt>
-            <dd>
-              Pick a color, choose a shutter sound, and let the notch follow you
-              between screens.
-            </dd>
-          </div>
-          <div>
-            <dt>Stays close. Stays local.</dt>
-            <dd>
-              Capture and text recognition run on your Mac. Collect a few shots,
-              then copy them together when you’re ready.
-            </dd>
-          </div>
-        </dl>
-      </section>
-      <section class="closing page" aria-labelledby="closing-heading">
-        <div>
-          <p class="eyebrow">A LITTLE SPACE FOR THE GOOD STUFF</p>
-          <h2 id="closing-heading">Give your notch<br />something to do.</h2>
-        </div>
-        <div class="closing-action">
-          <a class="download" href="/downloads/NotchShot-0.6.0.zip" download
-            >Download for macOS <span aria-hidden="true">↓</span></a
-          >
-          <p class="requirements">Free & open source · Preview 0.6.0</p>
+          <p class="requirements">Free &amp; open source <span>·</span> Apple silicon <span>·</span> macOS 15+</p>
         </div>
       </section>
-      <aside class="install-note page" aria-label="Preview information">
+
+      <aside class="install-note page" aria-label="Before you install">
         <p>
-          <strong>A little heads-up.</strong> This is an early development build
-          and isn’t notarized by Apple yet, so macOS may block it from opening.
-          Capture needs Accessibility and Screen Recording permissions. What’s
-          captured and pasted can vary by app.
+          <strong>A little heads-up.</strong> NotchShot is signed but not yet notarized by
+          Apple, so macOS may block the first launch. Allow it in System Settings → Privacy
+          &amp; Security, and from then on it updates itself. Capture needs Accessibility and
+          Screen Recording permissions, and what’s captured and pasted can vary by app.
         </p>
       </aside>
     </main>
-    <footer class="page">
-      <span>NotchShot <span class="muted">· Made by Brian</span></span>
+
+    <footer class="page site-footer">
+      <div class="footer-meta">
+        <span>NotchShot <span class="muted">· Made by Brian</span></span>
+        <small>App names and icons are trademarks of their respective owners. NotchShot isn’t affiliated with them.</small>
+      </div>
       <nav aria-label="Project links">
         <a href="https://github.com/bchewy/notchshot">GitHub</a
-        ><a href="/downloads/NotchShot-0.6.0-source.zip" download>Source ZIP</a
-        ><a href="/downloads/NotchShot-0.6.0-SHA256SUMS.txt">Checksums</a
-        ><a href="/downloads/LICENSE.txt">GPL-3.0</a
-        ><a href="/downloads/CREDITS.txt">Credits</a>
+        ><a href="https://github.com/bchewy/notchshot/releases/tag/v0.7.0">Release notes</a
+        ><a href="https://github.com/bchewy/notchshot/releases/download/v0.7.0/NotchShot-0.7.0-source.zip">Source ZIP</a
+        ><a href="https://github.com/bchewy/notchshot/releases/download/v0.7.0/NotchShot-0.7.0-SHA256SUMS.txt">Checksums</a
+        ><a href="/downloads/LICENSE.txt">GPL-3.0</a><a href="/downloads/CREDITS.txt">Credits</a>
       </nav>
     </footer>
-    <script src="/story.js?v=scroll-20260920" defer></script>
+    <script src="/site.js?v=0.7.0-2" defer></script>
   </body>
 </html>
