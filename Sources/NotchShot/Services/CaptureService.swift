@@ -48,10 +48,31 @@ final class CaptureService: CaptureServing {
 
     /// Only another regular app can be a target; NotchShot's own panels never are.
     private static func target(for app: NSRunningApplication?) -> CaptureTarget? {
-        guard let app, app.processIdentifier != ProcessInfo.processInfo.processIdentifier,
-              app.activationPolicy == .regular else { return nil }
-        return CaptureTarget(pid: app.processIdentifier, appName: app.localizedName ?? "Application",
+        guard let app, app.activationPolicy == .regular else { return nil }
+        // macOS can report a frontmost app without a valid PID (seen with Xcode's
+        // Device Hub). Its visible window still names the process that owns it.
+        let pid = app.processIdentifier > 0 ? app.processIdentifier
+            : windowOwnerPID(named: app.localizedName ?? "", in: onScreenWindowOwners())
+        guard let pid, pid != ProcessInfo.processInfo.processIdentifier else { return nil }
+        return CaptureTarget(pid: pid, appName: app.localizedName ?? "Application",
                              bundleIdentifier: app.bundleIdentifier ?? "")
+    }
+
+    /// The front-most standard window whose owner has exactly this name.
+    nonisolated static func windowOwnerPID(named name: String,
+                                           in windows: [(pid: Int32, owner: String, layer: Int)]) -> Int32? {
+        guard !name.isEmpty else { return nil }
+        return windows.first { $0.layer == 0 && $0.pid > 0 && $0.owner == name }?.pid
+    }
+
+    private static func onScreenWindowOwners() -> [(pid: Int32, owner: String, layer: Int)] {
+        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        guard let records = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else { return [] }
+        return records.compactMap { record in
+            guard let pid = (record[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value else { return nil }
+            return (pid, record[kCGWindowOwnerName as String] as? String ?? "",
+                    (record[kCGWindowLayer as String] as? NSNumber)?.intValue ?? 0)
+        }
     }
 
     /// A single-window screenshot plus the selected window's AX tree. No screen
@@ -120,11 +141,13 @@ final class CaptureService: CaptureServing {
         var result = initial
         async let accessibility = readAccessibility()
         var image: CGImage?
+        var screenshotFrame: CGRect?
         do {
             try Task.checkCancellation()
             if let screenshot = try await screenshot() {
                 try Task.checkCancellation()
                 image = screenshot.image
+                screenshotFrame = screenshot.windowFrame
                 result.sourceWindowFrame = screenshot.windowFrame
                 if let image { result.pngData = Self.pngData(image) }
                 if result.pngData == nil { result.warnings.append("The screenshot could not be encoded as PNG. Accessibility content is still available.") }
@@ -142,6 +165,10 @@ final class CaptureService: CaptureServing {
         let axResult = try await accessibility
         try Task.checkCancellation()
         let browserWithoutDocument = Self.applyAccessibility(axResult, to: &result)
+        // Element locations only mean something against this shot's own image,
+        // so none survive a screenshot that could not be kept.
+        result.axTree = AXNode.placing(result.axTree, window: screenshotFrame,
+                                       imageSize: result.pngData == nil ? nil : image.map { CGSize(width: $0.width, height: $0.height) })
         // OCR is a local fallback only. It is never presented as accessibility text.
         if let image, result.accessibilityText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || result.elementCount < 5 || browserWithoutDocument {
             do {
@@ -241,7 +268,11 @@ final class CaptureService: CaptureServing {
     /// when AX identified one but its geometry/title cannot be matched.
     nonisolated static func selectWindow(_ candidates: [CaptureWindowCandidate], focusedTitle: String?,
                                         focusedBounds: CGRect?, hasFocusedWindow: Bool) -> CaptureWindowCandidate? {
-        guard hasFocusedWindow else { return candidates.first(where: { $0.layer == 0 }) }
+        guard hasFocusedWindow else {
+            let standard = candidates.filter { $0.layer == 0 }
+            // Browsers can keep thin, untitled helper strips in front of their real window.
+            return standard.first(where: { !isAuxiliaryStrip($0) }) ?? standard.first
+        }
         let title = focusedTitle ?? ""
         if let bounds = focusedBounds {
             let matchingBounds = candidates.filter { close($0.bounds, bounds) }
@@ -254,6 +285,12 @@ final class CaptureService: CaptureServing {
             if matchingTitle.count == 1 { return matchingTitle[0] }
         }
         return nil
+    }
+
+    /// Untitled, thin, and long: a toolbar or tab strip, not a small window.
+    nonisolated static func isAuxiliaryStrip(_ candidate: CaptureWindowCandidate) -> Bool {
+        let short = min(candidate.bounds.width, candidate.bounds.height)
+        return candidate.title.isEmpty && short < 80 && max(candidate.bounds.width, candidate.bounds.height) >= 4 * short
     }
 
     private nonisolated static func close(_ first: CGRect, _ second: CGRect) -> Bool {

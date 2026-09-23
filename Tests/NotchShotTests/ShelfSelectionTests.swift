@@ -44,9 +44,9 @@ final class ShelfSelectionTests: XCTestCase {
         let expected = batch.contextText
         XCTAssertTrue(f.store.copyShelfSelection())
         XCTAssertEqual(f.board.string(forType: .string), expected)
-        XCTAssertTrue(expected.contains(shots[0].clipboardText))
-        XCTAssertTrue(expected.contains(shots[2].clipboardText))
-        XCTAssertFalse(expected.contains(shots[1].clipboardText))
+        XCTAssertTrue(expected.contains(shots[0].clipboardBody))
+        XCTAssertTrue(expected.contains(shots[2].clipboardBody))
+        XCTAssertFalse(expected.contains(shots[1].clipboardBody))
         XCTAssertEqual(f.sound.plays, 1, "One copy confirms the whole batch once.")
     }
 
@@ -107,7 +107,7 @@ final class ShelfSelectionTests: XCTestCase {
         XCTAssertTrue(compact.isShortened)
         f.store.batchContextStyle = .full
         let full = try await waitForPreparedBatch(f.store)
-        XCTAssertTrue(full.contextText.contains(large.clipboardText))
+        XCTAssertTrue(full.contextText.contains(large.clipboardBody))
         XCTAssertEqual(f.store.captures[0].accessibilityText, large.accessibilityText)
         XCTAssertEqual(f.store.captures[0].axTree.first?.value, large.axTree.first?.value)
         let restored = CaptureStore(preferences: f.preferences,

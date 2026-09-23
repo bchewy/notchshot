@@ -28,7 +28,7 @@ final class CopyCollapseTests: XCTestCase {
             switch name {
             case "image": XCTAssertEqual(fixture.clipboard.data(forType: .png), capture.pngData)
             case "text": XCTAssertEqual(fixture.clipboard.string(forType: .string), "Accessibility text\n\(capture.accessibilityText)")
-            case "tree": XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.treeText)
+            case "tree": XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.clipboardText)
             default:
                 XCTAssertEqual(fixture.clipboard.string(forType: .string), capture.clipboardText)
                 XCTAssertEqual(fixture.clipboard.data(forType: .png), capture.pngData)

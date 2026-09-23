@@ -88,6 +88,47 @@ enum AccessibilityReader {
 
     private static let protectedAttribute = NSAccessibility.Attribute.containsProtectedContent.rawValue
 
+    /// Text areas can hold whole documents; every other attribute is a label.
+    private static let documentRoles: Set<String> = [kAXTextAreaRole, kAXTextFieldRole]
+    static let labelCharacterLimit = 8_192
+    static let documentCharacterLimit = 120_000
+
+    static func characterLimit(role: String, attribute: String) -> Int {
+        attribute == kAXValueAttribute && documentRoles.contains(role) ? documentCharacterLimit : labelCharacterLimit
+    }
+
+    /// The states an app reports, in plain words. A checkbox or radio button's
+    /// 0/1/2 value becomes its state instead of a bare number.
+    static func states(role: String, value: Any?, enabled: Any?, focused: Any?,
+                       selected: Any?, expanded: Any?) -> (states: [String], keepsValue: Bool) {
+        var states: [String] = []
+        var keepsValue = true
+        if role == kAXCheckBoxRole || role == kAXRadioButtonRole, let number = value as? NSNumber {
+            states.append(number.intValue == 1 ? "checked" : number.intValue == 2 ? "mixed" : "unchecked")
+            keepsValue = false
+        }
+        if let expanded = expanded as? NSNumber { states.append(expanded.boolValue ? "expanded" : "collapsed") }
+        if (selected as? NSNumber)?.boolValue == true { states.append("selected") }
+        // A captured window is focused by definition; say so only of its contents.
+        if role != kAXWindowRole, (focused as? NSNumber)?.boolValue == true { states.append("focused") }
+        if (enabled as? NSNumber)?.boolValue == false { states.append("disabled") }
+        return (states, keepsValue)
+    }
+
+    /// An element's global screen rectangle, or nil when the app does not report one.
+    static func screenFrame(position: Any?, size: Any?) -> CGRect? {
+        guard let position, let size else { return nil }
+        let rawPosition = position as CFTypeRef
+        let rawSize = size as CFTypeRef
+        guard CFGetTypeID(rawPosition) == AXValueGetTypeID(), CFGetTypeID(rawSize) == AXValueGetTypeID() else { return nil }
+        var point = CGPoint.zero
+        var dimension = CGSize.zero
+        guard AXValueGetValue(unsafeBitCast(rawPosition, to: AXValue.self), .cgPoint, &point),
+              AXValueGetValue(unsafeBitCast(rawSize, to: AXValue.self), .cgSize, &dimension),
+              dimension.width > 0, dimension.height > 0 else { return nil }
+        return CGRect(origin: point, size: dimension)
+    }
+
     private static func copy(_ element: AXUIElement, _ attribute: CFString) -> CFTypeRef? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else { return nil }
@@ -152,9 +193,9 @@ enum AccessibilityReader {
             if !notes.contains(text) { notes.append(text) }
         }
 
-        func clipped(_ value: Any?) -> String {
+        func clipped(_ value: Any?, limit: Int = AccessibilityReader.labelCharacterLimit) -> String {
             let text = string(value).replacingOccurrences(of: "\0", with: "")
-            let capacity = max(0, min(8_192, maximumCharacters - characterCount))
+            let capacity = max(0, min(limit, maximumCharacters - characterCount))
             let output = String(text.prefix(capacity))
             characterCount += output.count
             if output.count < text.count { note("Some long accessibility attributes were truncated.") }
@@ -193,14 +234,23 @@ enum AccessibilityReader {
             }
 
             guard withinTimeBudget else { return AXNode(id: id, role: role, roleDescription: role) }
+            // One round trip reads the labels, location, and states together.
             let attributes = [kAXRoleDescriptionAttribute, kAXTitleAttribute, kAXValueAttribute,
-                              kAXDescriptionAttribute, kAXHelpAttribute, kAXURLAttribute, kAXPlaceholderValueAttribute]
+                              kAXDescriptionAttribute, kAXHelpAttribute, kAXURLAttribute, kAXPlaceholderValueAttribute,
+                              kAXPositionAttribute, kAXSizeAttribute, kAXEnabledAttribute, kAXFocusedAttribute,
+                              kAXSelectedAttribute, kAXExpandedAttribute]
             let values = copyMany(element, attributes)
             if values == nil { note("Some accessibility attributes could not be read; the tree is partial.") }
+            let reported = states(role: role, value: values?[2], enabled: values?[9], focused: values?[10],
+                                  selected: values?[11], expanded: values?[12])
             var node = AXNode(id: id, role: role, roleDescription: clipped(values?[0]),
-                              title: clipped(values?[1]), value: clipped(values?[2]),
+                              title: clipped(values?[1]),
+                              value: reported.keepsValue
+                                ? clipped(values?[2], limit: characterLimit(role: role, attribute: kAXValueAttribute)) : "",
                               elementDescription: clipped(values?[3]), help: clipped(values?[4]),
                               url: clipped(values?[5]), placeholder: clipped(values?[6]))
+            node.states = reported.states.isEmpty ? nil : reported.states
+            node.screenFrame = screenFrame(position: values?[7], size: values?[8])
             if withinTimeBudget {
                 var settable: DarwinBoolean = false
                 if AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable) == .success {

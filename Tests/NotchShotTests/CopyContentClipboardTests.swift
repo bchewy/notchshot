@@ -58,8 +58,8 @@ final class CopyContentClipboardTests: XCTestCase {
             XCTAssertEqual(item.types, [.string])
             XCTAssertTrue(text.hasPrefix("# NotchShot — 2 trees · No images\n"))
             XCTAssertEqual(text.drop(while: { $0 != "\n" }), batch.contextText.drop(while: { $0 != "\n" }))
-            XCTAssertTrue(text.contains(first.clipboardText))
-            XCTAssertTrue(text.contains(second.clipboardText))
+            XCTAssertTrue(text.contains(first.clipboardBody))
+            XCTAssertTrue(text.contains(second.clipboardBody))
             XCTAssertEqual(text, CaptureClipboardService.treeText(for: batch))
             XCTAssertEqual(text.count, CaptureClipboardService.treeCharacterCount(for: batch))
         }
@@ -165,7 +165,7 @@ final class CopyContentClipboardTests: XCTestCase {
         XCTAssertNil(CaptureClipboardService.makeItem(for: CaptureBatch(captures: [], contextStyle: .full), content: .imageOnly))
         let tree = try XCTUnwrap(CaptureClipboardService.makeItem(for: missing, content: .treeOnly))
         XCTAssertEqual(tree.types, [.string])
-        XCTAssertTrue(try XCTUnwrap(tree.string(forType: .string)).hasSuffix("No accessibility tree was available for this shot."))
+        XCTAssertTrue(try XCTUnwrap(tree.string(forType: .string)).hasSuffix("No accessibility tree was available for this shot.\n" + CapturedContext.closing))
         XCTAssertFalse(try XCTUnwrap(tree.string(forType: .string)).contains(missing.ocrText))
     }
 

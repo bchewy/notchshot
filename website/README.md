@@ -1,8 +1,8 @@
 # NotchShot website
 
-A static landing page with a scroll-driven capture walkthrough, the original
-demo video, and the 0.6.0 preview downloads. No dependencies or build step.
-A source update alone does not replace the downloadable app; each preview is packaged and verified separately.
+A static landing page with a scroll-driven capture walkthrough, an interactive
+feature grid, and the original demo video. Downloads point at the signed
+release on GitHub. No dependencies or build step.
 
 ## Preview locally
 
@@ -16,11 +16,16 @@ Open <http://127.0.0.1:4175>.
 
 ## Contents
 
-- `dist/index.html`, `dist/style.css`, and `dist/story.js`: page source.
+- `dist/index.html`, `dist/style.css`, and `dist/site.js`: page source.
 - `dist/assets/`: demo video and poster.
-- `dist/downloads/`: immutable preview app, corresponding source, and notices.
+- `dist/downloads/`: the license and credits the page links to, plus the
+  immutable 0.5.2 and 0.6.0 preview archives kept for existing links.
 
-The checked-in release files are:
+Since 0.7.0, the page links straight to the release assets on GitHub
+(`NotchShot-VERSION.zip`, `-source.zip`, and `-SHA256SUMS.txt`), which CI
+publishes and signs. Installed copies update themselves, so a new release only
+needs the version in the page's links and requirement lines bumped. The
+retained static preview files are:
 
 - `dist/downloads/NotchShot-0.6.0.zip`
 - `dist/downloads/NotchShot-0.6.0-source.zip`
@@ -54,19 +59,29 @@ accurate; 0.6.0 is a certificate-signed preview and is not notarized.
 
 ## Scroll walkthrough
 
-The illustrative Notes window shrinks to a screenshot card and follows a curved
-path into the notch shelf. Native scrolling controls the reversible sequence;
-the three step buttons provide keyboard-accessible shortcuts. The real recording
-remains below the illustration and loads only when played.
+A pinned, four-chapter story: both Shift keys press and the notch's aperture
+shuts like a shutter; the Notes window becomes a card while its accessibility
+tree unfolds beside it; the card arcs into the opening shelf; and History
+searches for it. Native scrolling drives everything. `site.js` smooths the
+story's progress with a spring, so motion glides on a notchy wheel without
+intercepting scroll. The rail buttons jump to each chapter, and the aperture is
+drawn with the same geometry as the app.
 
-`prefers-reduced-motion` switches to a compact static shelf. Without JavaScript,
-the static shelf, explanation, video, and downloads remain available. No animation
-library, scroll interception, external fonts, or runtime dependencies are used.
+The rest of the page adds a scroll-velocity app marquee, a bento grid (the
+Appearance card lets visitors switch marks and recolor the page), a film frame
+that scales in as it arrives, and a closing call to action. One
+`requestAnimationFrame` loop runs only while something moves; a full scroll
+through the story holds 60 fps in headless Chrome.
 
-For visual changes, check the capture, floating-card, and landing states on desktop
-and mobile; scroll backward; exercise the step buttons and skip link; and verify
-reduced motion and JavaScript-disabled rendering. Keep the download archives
-unchanged for website-only updates.
+`prefers-reduced-motion` shows the chapters as a summary above a composed static
+shelf, stops the marquee, and drops every transition. Without JavaScript the
+same static composition, video controls, and downloads remain, and nothing stays
+hidden if `site.js` fails to load. No animation library, scroll interception,
+external fonts, or runtime dependencies are used.
+
+For visual changes, check each chapter on desktop, tablet, and phone widths;
+scroll backward; exercise the rail and skip link; and verify reduced motion and
+JavaScript-disabled rendering.
 
 ## Vercel deployment
 
