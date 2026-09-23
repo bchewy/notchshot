@@ -91,6 +91,22 @@ final class UpdateCatalogTests: XCTestCase {
         XCTAssertEqual(stable.tag, "v0.7.0")
     }
 
+    func testDiskImageAlongsideTheArchiveDoesNotChangeTheOffer() throws {
+        // Releases from 0.8.2 add a disk image for people; updates keep installing the ZIP.
+        let tag = "v0.7.0"
+        let withImage = release(tag, at: 1, assets: [manifestAsset(tag), archiveAsset(tag),
+                                                     asset("NotchShot-0.7.0.dmg", tag: tag, size: 9000)])
+        let offer = try UpdateCatalog.offer(
+            release: withImage,
+            manifest: manifest(artifacts: ["NotchShot-0.7.0.zip": String(repeating: "a", count: 64),
+                                           "NotchShot-0.7.0.dmg": String(repeating: "c", count: 64),
+                                           "NotchShot-0.7.0-source.zip": String(repeating: "b", count: 64)]),
+            bundleIdentifier: "com.bchewy.NotchShot")
+        XCTAssertEqual(offer.archiveName, "NotchShot-0.7.0.zip")
+        XCTAssertEqual(offer.archiveSHA256, String(repeating: "a", count: 64))
+        XCTAssertEqual(offer.archiveSize, 4096)
+    }
+
     func testOfferRefusesMetadataThatDisagreesWithItsReleaseOrThisApp() {
         let bundle = "com.bchewy.NotchShot"
         let cases: [(String, GitHubRelease, UpdateManifest)] = [
