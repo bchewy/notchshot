@@ -94,15 +94,75 @@ final class CapturedContextTests: XCTestCase {
         var infinite = AXNode(id: 3, role: "AXButton", roleDescription: "button", title: "Broken")
         infinite.screenFrame = CGRect(x: CGFloat.infinity, y: 0, width: 10, height: 10)
         let unknown = AXNode(id: 4, role: "AXButton", roleDescription: "button", title: "Unknown")
+        var window = AXNode(id: 5, role: "AXWindow", roleDescription: "window", title: "Document",
+                            children: [partial, outside, infinite, unknown])
+        window.screenFrame = windowFrame
 
-        let placed = AXNode.placing([partial, outside, infinite, unknown], window: windowFrame,
-                                    imageSize: CGSize(width: 200, height: 100))
+        let placed = AXNode.placing([window], window: windowFrame, imageSize: CGSize(width: 200, height: 100))[0].children
 
         XCTAssertEqual(placed.map(\.title), ["Partly scrolled", "Off screen", "Broken", "Unknown"], "Nodes are kept; only positions go.")
         XCTAssertEqual(placed[0].frame, CGRect(x: 0, y: 80, width: 50, height: 20))
         XCTAssertNil(placed[1].frame)
         XCTAssertNil(placed[2].frame)
         XCTAssertNil(placed[3].frame)
+    }
+
+    func testPositionsNeedTheWindowWhereTheScreenshotFoundIt() {
+        let screenshotFrame = CGRect(x: 100, y: 200, width: 400, height: 300)
+        func tree(windowAt frame: CGRect?) -> [AXNode] {
+            var button = AXNode(id: 2, role: "AXButton", roleDescription: "button", title: "Save")
+            button.screenFrame = CGRect(x: 150, y: 250, width: 100, height: 50)
+            var window = AXNode(id: 1, role: "AXWindow", roleDescription: "window", title: "Document", children: [button])
+            window.screenFrame = frame
+            return [window]
+        }
+        func buttonFrame(windowAt frame: CGRect?) -> CGRect? {
+            AXNode.placing(tree(windowAt: frame), window: screenshotFrame,
+                           imageSize: CGSize(width: 800, height: 600))[0].children[0].frame
+        }
+
+        XCTAssertEqual(buttonFrame(windowAt: screenshotFrame.offsetBy(dx: 1.5, dy: -1.5)), CGRect(x: 100, y: 100, width: 200, height: 100))
+        XCTAssertNil(buttonFrame(windowAt: screenshotFrame.offsetBy(dx: 200, dy: 0)), "The window moved between screenshot and tree.")
+        XCTAssertNil(buttonFrame(windowAt: CGRect(x: 100, y: 200, width: 600, height: 300)), "The window was resized.")
+        XCTAssertNil(buttonFrame(windowAt: nil), "Without the window's own frame, nothing proves the two line up.")
+    }
+
+    @MainActor
+    func testCapturePipelinePlacesElementsInItsOwnScreenshot() async throws {
+        // A 10×5-point window at (100, 200), captured as a 20×10-pixel image.
+        let windowFrame = CGRect(x: 100, y: 200, width: 10, height: 5)
+        let image = try XCTUnwrap(CGContext(data: nil, width: 20, height: 10, bitsPerComponent: 8, bytesPerRow: 80,
+                                            space: CGColorSpaceCreateDeviceRGB(),
+                                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)?.makeImage())
+        func read(windowAt frame: CGRect) -> AccessibilityReadResult {
+            var button = AXNode(id: 2, role: "AXButton", roleDescription: "button", title: "Save")
+            button.screenFrame = CGRect(x: 102, y: 201, width: 4, height: 2)
+            var window = AXNode(id: 1, role: "AXWindow", roleDescription: "window", title: "Fixture", children: [button])
+            window.screenFrame = frame
+            return AccessibilityReadResult(tree: [window])
+        }
+        let initial = CaptureResult(appName: "Fixture App", bundleIdentifier: "com.example.fixture", windowTitle: "Fixture")
+        let steadyTree = read(windowAt: windowFrame)
+        let movedTree = read(windowAt: windowFrame.offsetBy(dx: 50, dy: 0))
+
+        let steady = try await CaptureService().captureContent(
+            initial: initial, readAccessibility: { [steadyTree] in steadyTree },
+            screenshot: { (image, windowFrame) }, recognizeText: { _ in "" })
+        XCTAssertEqual(steady.axTree[0].frame, CGRect(x: 0, y: 0, width: 20, height: 10))
+        XCTAssertEqual(steady.axTree[0].children[0].frame, CGRect(x: 4, y: 2, width: 8, height: 4))
+        XCTAssertNil(steady.axTree[0].children[0].screenFrame)
+        XCTAssertTrue(steady.clipboardText.contains("\tbutton Save @4,2 8×4"))
+
+        let moved = try await CaptureService().captureContent(
+            initial: initial, readAccessibility: { [movedTree] in movedTree },
+            screenshot: { (image, windowFrame) }, recognizeText: { _ in "" })
+        XCTAssertNil(moved.axTree[0].children[0].frame)
+        XCTAssertFalse(moved.clipboardText.contains(CapturedContext.positionsNote))
+
+        let noScreenshot = try await CaptureService().captureContent(
+            initial: initial, readAccessibility: { [steadyTree] in steadyTree },
+            screenshot: { nil }, recognizeText: { _ in "" })
+        XCTAssertFalse(noScreenshot.clipboardText.contains("@"))
     }
 
     func testWithoutScreenshotPositionsAreDroppedAndNeverMentioned() {
@@ -290,6 +350,8 @@ final class CapturedContextTests: XCTestCase {
         let inbox = CaptureWindowCandidate(id: 2, title: "Inbox", bounds: CGRect(x: 0, y: 25, width: 1440, height: 875), layer: 0)
         let untitled = CaptureWindowCandidate(id: 3, title: "", bounds: CGRect(x: 40, y: 60, width: 800, height: 600), layer: 0)
         let narrowTitled = CaptureWindowCandidate(id: 4, title: "Ruler", bounds: CGRect(x: 0, y: 0, width: 30, height: 800), layer: 0)
+        let smallUntitled = CaptureWindowCandidate(id: 5, title: "", bounds: CGRect(x: 0, y: 0, width: 60, height: 60), layer: 0)
+        let sideStrip = CaptureWindowCandidate(id: 6, title: "", bounds: CGRect(x: 0, y: 25, width: 40, height: 800), layer: 0)
         func pick(_ candidates: [CaptureWindowCandidate]) -> UInt32? {
             CaptureService.selectWindow(candidates, focusedTitle: nil, focusedBounds: nil, hasFocusedWindow: false)?.id
         }
@@ -297,6 +359,8 @@ final class CapturedContextTests: XCTestCase {
         XCTAssertEqual(pick([strip, inbox]), 2)
         XCTAssertEqual(pick([strip, untitled]), 3, "An untitled full-size window is still a real window.")
         XCTAssertEqual(pick([narrowTitled, inbox]), 4, "A titled window is never treated as a helper strip.")
+        XCTAssertEqual(pick([smallUntitled, inbox]), 5, "A small untitled window is still a window, not a strip.")
+        XCTAssertEqual(pick([sideStrip, inbox]), 2, "Strips can run down the side, too.")
         XCTAssertEqual(pick([strip]), 1, "With only strips, the front one beats capturing nothing.")
     }
 

@@ -102,8 +102,22 @@ struct AXNode: Codable, Equatable, Identifiable, Sendable {
 
     /// Converts each element's screen location into pixels of the window's
     /// screenshot, clipped to the image. Without a screenshot, locations are
-    /// dropped: they would describe nothing the reader can see.
+    /// dropped: they would describe nothing the reader can see. They are also
+    /// dropped unless the tree's own window stood where the screenshot found it:
+    /// the two are read concurrently, and a window moved in between would
+    /// misplace every element.
     static func placing(_ nodes: [AXNode], window: CGRect?, imageSize: CGSize?) -> [AXNode] {
+        let anchored: Bool
+        if let window, let root = nodes.first?.screenFrame {
+            anchored = abs(root.minX - window.minX) <= 2 && abs(root.minY - window.minY) <= 2
+                && abs(root.width - window.width) <= 2 && abs(root.height - window.height) <= 2
+        } else {
+            anchored = false
+        }
+        return mapping(nodes, window: anchored ? window : nil, imageSize: imageSize)
+    }
+
+    private static func mapping(_ nodes: [AXNode], window: CGRect?, imageSize: CGSize?) -> [AXNode] {
         nodes.map { node in
             var placed = node
             placed.frame = nil
@@ -121,7 +135,7 @@ struct AXNode: Codable, Equatable, Identifiable, Sendable {
                 }
             }
             placed.screenFrame = nil
-            placed.children = placing(node.children, window: window, imageSize: imageSize)
+            placed.children = mapping(node.children, window: window, imageSize: imageSize)
             return placed
         }
     }

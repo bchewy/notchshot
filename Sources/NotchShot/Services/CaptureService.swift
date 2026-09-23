@@ -165,9 +165,10 @@ final class CaptureService: CaptureServing {
         let axResult = try await accessibility
         try Task.checkCancellation()
         let browserWithoutDocument = Self.applyAccessibility(axResult, to: &result)
-        // Element locations only mean something against this shot's own image.
+        // Element locations only mean something against this shot's own image,
+        // so none survive a screenshot that could not be kept.
         result.axTree = AXNode.placing(result.axTree, window: screenshotFrame,
-                                       imageSize: image.map { CGSize(width: $0.width, height: $0.height) })
+                                       imageSize: result.pngData == nil ? nil : image.map { CGSize(width: $0.width, height: $0.height) })
         // OCR is a local fallback only. It is never presented as accessibility text.
         if let image, result.accessibilityText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || result.elementCount < 5 || browserWithoutDocument {
             do {
@@ -286,8 +287,10 @@ final class CaptureService: CaptureServing {
         return nil
     }
 
+    /// Untitled, thin, and long: a toolbar or tab strip, not a small window.
     nonisolated static func isAuxiliaryStrip(_ candidate: CaptureWindowCandidate) -> Bool {
-        candidate.title.isEmpty && min(candidate.bounds.width, candidate.bounds.height) < 80
+        let short = min(candidate.bounds.width, candidate.bounds.height)
+        return candidate.title.isEmpty && short < 80 && max(candidate.bounds.width, candidate.bounds.height) >= 4 * short
     }
 
     private nonisolated static func close(_ first: CGRect, _ second: CGRect) -> Bool {
