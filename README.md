@@ -34,10 +34,10 @@ by destination app.
 ## Build and run
 
 Requires **macOS 15+** and **Swift 6**. Building needs only the Xcode Command Line
-Tools. Download **0.7.0** from
-[GitHub Releases](https://github.com/bchewy/notchshot/releases/tag/v0.7.0); from
-this release on, NotchShot keeps itself up to date. It targets Apple silicon and
-is not notarized. See the [release notes](docs/releases/0.7.0.md) for changes and
+Tools. Download **0.8.0** from
+[GitHub Releases](https://github.com/bchewy/notchshot/releases/tag/v0.8.0);
+0.7.0 and later keep themselves up to date. It targets Apple silicon and
+is not notarized. See the [release notes](docs/releases/0.8.0.md) for changes and
 verification limits.
 
 ```sh
