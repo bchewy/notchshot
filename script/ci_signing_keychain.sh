@@ -18,11 +18,20 @@ case "${1:-}" in
     security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
     security set-keychain-settings -lut 21600 "$KEYCHAIN"
     security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+    echo "Importing the signing identity."
     security import "$CERTIFICATE" -k "$KEYCHAIN" -f pkcs12 -P "$NOTCHSHOT_SIGNING_P12_PASSWORD" -T /usr/bin/codesign
     # Apple Development certificates chain through the WWDR G3 intermediate;
     # codesign embeds it, and the build script checks the chain with OCSP.
+    # Runner images may already install it, and import then reports a duplicate.
+    echo "Importing the WWDR G3 intermediate."
     curl -fsSL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o "$INTERMEDIATE"
-    security import "$INTERMEDIATE" -k "$KEYCHAIN"
+    if ! output="$(security import "$INTERMEDIATE" -k "$KEYCHAIN" 2>&1)"; then
+      if [[ "$output" != *"already exists"* ]]; then
+        echo "$output" >&2
+        exit 1
+      fi
+      echo "The WWDR G3 intermediate is already installed."
+    fi
     security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
     security list-keychains -d user -s "$KEYCHAIN"
     IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | awk '/"Apple Development:/ && !/CSSMERR_/ {print $2; exit}')"
