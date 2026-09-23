@@ -4,6 +4,8 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+  # Nightly and stable releases publish only after this same suite passes.
+  workflow_call:
 
 permissions:
   contents: read

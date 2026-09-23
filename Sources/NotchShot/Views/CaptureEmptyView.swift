@@ -3,6 +3,7 @@ import SwiftUI
 
 struct CaptureEmptyView: View {
     @Environment(\.notchTheme) private var theme
+    @Environment(UpdateController.self) private var updates: UpdateController?
     @Bindable var store: CaptureStore
     var reviewingPermissions = false
     @State private var scrollbarProtection = UUID()
@@ -57,6 +58,9 @@ struct CaptureEmptyView: View {
                                 .frame(width: 31, alignment: .trailing)
                                 .accessibilityHidden(true)
                         }
+                    }
+                    if let updates {
+                        UpdateSettingsView(updates: updates)
                     }
                     Divider().padding(.vertical, 2)
                 }

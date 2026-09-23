@@ -15,6 +15,8 @@ enum AssistedPasteResult: Equatable {
 @MainActor
 protocol AssistedPasteServing: AnyObject {
     var onResult: ((AssistedPasteResult) -> Void)? { get set }
+    /// Armed for the next ⌘V, or partway through pasting.
+    var hasPendingPaste: Bool { get }
     @discardableResult func arm(capture: CaptureResult, clipboard: NSPasteboard) -> Bool
     @discardableResult func arm(batch: CaptureBatch, clipboard: NSPasteboard) -> Bool
     func cancel()
@@ -26,6 +28,8 @@ extension AssistedPasteServing {
     // the complete rich batch on the clipboard for ordinary paste.
     @discardableResult
     func arm(batch: CaptureBatch, clipboard: NSPasteboard) -> Bool { false }
+
+    var hasPendingPaste: Bool { false }
 }
 
 // The native identity contains immutable AX object references. Those references
@@ -63,6 +67,7 @@ final class AssistedPasteService: AssistedPasteServing {
     var onResult: ((AssistedPasteResult) -> Void)?
     var isArmed: Bool { phase == .armed }
     var isPasting: Bool { phase == .preparing || phase == .imageSent || phase == .textSent }
+    var hasPendingPaste: Bool { isArmed || isPasting }
 
     private enum Phase { case idle, armed, preparing, imageSent, textSent }
     private let environment: any AssistedPasteEnvironment

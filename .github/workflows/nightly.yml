@@ -1,0 +1,119 @@
+name: Nightly
+
+# Builds main once a day when it has changed, then publishes a signed
+# `nightly-<build>` prerelease for the in-app Nightly update channel.
+on:
+  schedule:
+    - cron: "0 18 * * *" # 02:00 Singapore time
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Distinct from the reusable test workflow's own group, which also uses this
+# workflow's name.
+concurrency:
+  group: nightly-release
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Check for changes
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.plan.outputs.build }}
+      publish: ${{ steps.plan.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # the build number is the commit count
+
+      - name: Decide whether to publish
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HAS_SIGNING: ${{ secrets.NOTCHSHOT_SIGNING_P12_BASE64 != '' && secrets.NOTCHSHOT_SIGNING_P12_PASSWORD != '' }}
+        run: |
+          build=$(git rev-list --count HEAD)
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          if [ "$HAS_SIGNING" != true ]; then
+            echo "::warning::Signing secrets are not configured, so no nightly was published (docs/RELEASING.md)."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          elif gh release view "nightly-$build" >/dev/null 2>&1; then
+            echo "nightly-$build is already published; main has not changed."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  test:
+    name: Test
+    needs: plan
+    if: needs.plan.outputs.publish == 'true'
+    uses: ./.github/workflows/tests.yml
+
+  publish:
+    name: Build and publish nightly
+    needs: [plan, test]
+    runs-on: macos-26
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD: ${{ needs.plan.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Import signing certificate
+        env:
+          NOTCHSHOT_SIGNING_P12_BASE64: ${{ secrets.NOTCHSHOT_SIGNING_P12_BASE64 }}
+          NOTCHSHOT_SIGNING_P12_PASSWORD: ${{ secrets.NOTCHSHOT_SIGNING_P12_PASSWORD }}
+        run: script/ci_signing_keychain.sh import
+
+      - name: Build, sign, and package
+        run: |
+          NOTCHSHOT_BUILD_CHANNEL=Nightly ./script/build_and_run.sh --stage-only
+          python3 script/package_release.py work/staged/NotchShot.app --output-dir "$RUNNER_TEMP/release"
+          staged=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' work/staged/NotchShot.app/Contents/Info.plist)
+          if [ "$staged" != "$BUILD" ]; then
+            echo "::error::Staged build $staged does not match planned build $BUILD."
+            exit 1
+          fi
+
+      - name: Publish prerelease
+        run: |
+          version=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' work/staged/NotchShot.app/Contents/Info.plist)
+          revision=$(git rev-parse HEAD)
+          previous=$(git tag --list 'nightly-*' --sort=-v:refname | head -1)
+          {
+            echo "Automated nightly build of \`main\` at \`$revision\`."
+            echo
+            echo "NotchShot $version, build $BUILD. Nightly-channel installs update to this automatically."
+            echo "Signed with the same certificate as stable releases; not notarized."
+            if [ -n "$previous" ]; then
+              echo
+              echo "### Changes since $previous"
+              echo
+              git log --no-merges --format='- %s (%h)' "$previous..HEAD"
+            fi
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "nightly-$BUILD" "$RUNNER_TEMP"/release/* \
+            --prerelease --target "$revision" \
+            --title "NotchShot nightly $version ($BUILD)" \
+            --notes-file "$RUNNER_TEMP/notes.md"
+
+      - name: Keep the newest 7 nightlies
+        run: |
+          gh release list --limit 100 --json tagName,publishedAt \
+            --jq '[.[] | select(.tagName | test("^nightly-[0-9]+$"))] | sort_by(.publishedAt) | reverse | .[7:] | .[].tagName' |
+          while read -r tag; do
+            gh release delete "$tag" --cleanup-tag --yes
+          done
+
+      - name: Remove signing keychain
+        if: always()
+        run: script/ci_signing_keychain.sh cleanup

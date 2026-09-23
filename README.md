@@ -20,18 +20,21 @@ your notch. Copy one shot or several into your next conversation.
 - Customize shutter sounds, automatic copying, and gentle auto-collapse behavior.
 - Pick Mint, Sky, Lavender, Rose, Peach, or Gold in Appearance settings.
 - Optionally follow your pointer to the active display, keeping the same shelf.
+- Stay current on the Stable or Nightly channel, with signature-verified automatic updates.
 
-The app has no account, cloud service, or AI dependency. Captures remain in
+The app has no account, cloud service, or AI dependency. Its only network access
+is an optional update check against GitHub Releases. Captures remain in
 memory until you copy or export them. Capture coverage and paste support vary
 by destination app.
 
 ## Build and run
 
 Requires **macOS 15+** and **Swift 6**. Building needs only the Xcode Command Line
-Tools. Download the **0.6.0 preview** from [notchshot.com](https://notchshot.com)
-or [GitHub Releases](https://github.com/bchewy/notchshot/releases/tag/v0.6.0).
-It targets Apple silicon and is not notarized. See the
-[release notes](docs/releases/0.6.0.md) for changes and remaining verification limits.
+Tools. Download **0.7.0** from
+[GitHub Releases](https://github.com/bchewy/notchshot/releases/tag/v0.7.0); from
+this release on, NotchShot keeps itself up to date. It targets Apple silicon and
+is not notarized. See the [release notes](docs/releases/0.7.0.md) for changes and
+verification limits.
 
 ```sh
 git clone https://github.com/bchewy/notchshot.git
@@ -60,11 +63,13 @@ bash -n script/build_and_run.sh
 Running the tests needs full Xcode, because XCTest ships only with Xcode. The
 Command Line Tools alone can build the app but cannot compile the test target.
 GitHub Actions runs the build and the suite on every push and pull request
-(`.github/workflows/tests.yml`).
+(`.github/workflows/tests.yml`). The same suite gates the signed nightly builds
+of `main` and the stable releases published from `v*` tags; see
+[releasing](docs/RELEASING.md).
 
-The current suite has **378 tests**, covering the capture entry path, capture
+The current suite has **409 tests**, covering the capture entry path, capture
 formatting, clipboard preparation, selection, shortcuts, shelf motion, and
-auto-collapse, plus theme preferences and display following.
+auto-collapse, plus theme preferences, display following, and update verification.
 See [verification notes](docs/VERIFICATION.md) for the historical checks and
 [the user guide](docs/USER_GUIDE.md) for permissions and signing troubleshooting.
 

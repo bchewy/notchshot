@@ -24,6 +24,12 @@ struct NotchShotApp: App {
             Button("Refresh permissions") { delegate.store.refreshPermissions() }
             Button("Reopen after permission change") { delegate.store.reopenForPermissions() }
             Divider()
+            Button("Check for updates…") {
+                delegate.store.showCaptureSettings()
+                delegate.updates.checkNow()
+            }
+            .disabled(!delegate.updates.isAvailable || delegate.updates.isBusy)
+            Divider()
             Button("Clear session captures") { delegate.store.clearHistory() }.disabled(delegate.store.captures.isEmpty)
             Button("Quit NotchShot") { NSApplication.shared.terminate(nil) }.keyboardShortcut("q")
         }
@@ -33,6 +39,7 @@ struct NotchShotApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let store = CaptureStore(preferences: .standard, clipboard: .general)
+    let updates = UpdateController.forRunningApp(preferences: .standard)
     private var panelController: NotchPanelController?
     private let shortcut = GlobalShortcutService()
     private let bothShift = BothShiftShortcutService()
@@ -42,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Deliberate accessory utility: lives in the notch and menu bar, with no Dock icon.
         NSApp.setActivationPolicy(.accessory)
         store.start()
-        panelController = NotchPanelController(store: store)
+        panelController = NotchPanelController(store: store, updates: updates)
         panelController?.show()
         cardController = CaptureCardController(store: store, compactLandingFrame: { [weak self] in
             self?.panelController?.compactLandingFrame
@@ -74,10 +81,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         configureCaptureShortcut()
-        store.onReopen = { [weak self] in self?.reopenForPermissions() }
+        store.onReopen = { [weak self] in self?.relaunch() }
+        updates.canInstallNow = { [weak self] in self?.store.canRelaunchUnnoticed ?? false }
+        updates.onRelaunch = { [weak self] in self?.relaunch() }
+        updates.onNotice = { [weak self] kind, title, message in self?.store.report(kind, title, message: message) }
+        updates.start()
     }
 
-    private func reopenForPermissions() {
+    private func relaunch() {
+        // Reopening already clears the shelf, so a waiting update goes in first.
+        updates.installPendingUpdate()
         // Release the global shortcut before the replacement instance registers it.
         shortcut.unregister()
         bothShift.stop()
@@ -97,6 +110,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        updates.installPendingUpdate()
+        updates.stop()
         store.stop()
         shortcut.unregister()
         bothShift.stop()
