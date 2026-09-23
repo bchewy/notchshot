@@ -207,7 +207,7 @@ struct CapturePreviewView: View {
     }
 }
 
-private struct PreviewUnavailableView: View {
+struct PreviewUnavailableView: View {
     let symbol: String
     let title: String
     let detail: String

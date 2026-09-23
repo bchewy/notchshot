@@ -46,7 +46,8 @@ enum NotchTheme: String, CaseIterable, Identifiable, Sendable {
         return NSColor(srgbRed: rgb.red, green: rgb.green, blue: rgb.blue, alpha: 1)
     }
 
-    var mascotHighlight: Color {
+    /// The lighter end of the aperture mark's gradient.
+    var apertureHighlight: Color {
         switch self {
         case .mint: Color(.sRGB, red: 0.70, green: 0.98, blue: 0.85)
         case .sky: Color(.sRGB, red: 0.76, green: 0.90, blue: 1.00)

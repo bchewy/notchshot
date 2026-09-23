@@ -18,13 +18,13 @@ The runnable bundle is `outputs/NotchShot.app`. The Codex Run action uses the sa
 2. Focus any app window, then press **left Shift + right Shift together (⇧ + ⇧)**, or choose Capture app from the menu bar. The default gesture is enabled automatically. To configure an alternative, open notch settings (sliders icon) and use **Alternative shortcut**. The captured window gives a brief flash, then its screenshot shrinks into a floating preview over the app. The notch opens a receiving slot and the card flies into that slot once its text and tree are ready, leaving the shelf open. An already open shelf stays open during capture. Your selected Fujifilm shutter accompanies it when Capture sound is enabled.
 3. Drag an Appshot, local image, or text onto the notch to add it to the shelf. Hovering over the collapsed notch opens the drop area. Hover a saved thumbnail for a larger screenshot and app/window details without changing your selection. While hovering, press **⌘C** to copy that exact shot using your **Copy content** preference (screenshot + AX tree by default). Move away to return ⌘C to the active app. Click it to inspect **Screenshot**, **Text**, or **AX tree**. Copy each separately, or use **Copy shot** with your preferred content. Rich-text editors can paste the screenshot followed by context in one document. Enable **Paste image, then text** for chat composers that choose only one clipboard format.
 4. **Export** creates a new folder containing `screenshot.png` when available, `context.md`, `accessibility.txt`, `accessibility-tree.txt`, `accessibility-tree.json`, `metadata.json`, `ocr.txt` when available, and `imported-text.txt` when text accompanies a drop.
-5. Press Escape to collapse the notch; click its camera tab to reopen. When shots are saved or arriving, a small **trash icon on the right of the notch** clears the entire shelf in one click, even while collapsed. It removes pending shots too and keeps copied content available to paste. The icon disappears when the shelf is empty. The menu bar provides capture, permission settings, and Quit.
+5. Press Escape to collapse the notch; click it to reopen. While shots are on the shelf, the right side of the notch shows how many. To clear them all, open the shelf and click the **trash** button in its header, beside Settings. It removes pending shots too and keeps copied content available to paste, and it appears only while there are shots. The menu bar provides capture, permission settings, and Quit.
 
 NotchShot **starts collapsed**. The collapsed window fits the hardware notch plus 36 points for small side indicators (225 × 32 on this Mac), leaving more space for menu bar items. Click it to open the compact **440 × 180-point shot shelf**. By default, new captures open this shelf; they do not open the detail view. The shelf stays open while you use it and gently collapses after three seconds away. Select a thumbnail to inspect screenshot, text, and AX tree in a **440 × 480-point** detail page, or open **Settings** at **440 × 440**. Back returns to the shelf. All size changes use the short, interruptible animation and respect macOS **Reduce Motion**. Capture notes remain available beside the capture title in details.
 
 ## Colors and appearance
 
-Open **Settings → Appearance** and choose **Mint**, **Sky**, **Lavender**, **Rose**, **Peach**, or **Gold**. The labeled color swatches preview each option; a checkmark shows the selected theme. Changes apply immediately to the mascot, shelf selection, buttons, scrollbar, and floating previews, and the choice is remembered after restarting. Mint is the default. The dark notch background stays consistent with the hardware notch.
+Open **Settings → Appearance** and choose **Mint**, **Sky**, **Lavender**, **Rose**, **Peach**, or **Gold**. The labeled color swatches preview each option; a checkmark shows the selected theme. Changes apply immediately to the notch marks, shelf selection, buttons, scrollbar, and floating previews, and the choice is remembered after restarting. The same section chooses what sits on each side of the notch; see [Notch marks](#notch-marks). Mint is the default. The dark notch background stays consistent with the hardware notch.
 
 ## Following your active screen
 
@@ -32,11 +32,20 @@ Enable **Settings → Display → Follow active screen** to move the notch to th
 
 Moving preserves the shelf, selection, and current page. The notch stays put while you capture, drag, use its keyboard controls, hold a mouse button, open a menu/popover, or choose an export folder. Capture cards land on the notch's current display. Disconnecting that display moves the notch to an available one. Movement uses a brief fade and respects **Reduce Motion**. No additional macOS permission is required.
 
-## Tiny photographer
+## Notch marks
 
-A tiny photographer in your selected theme color replaces the viewfinder in the left notch lane. It holds the camera selected in Shutter settings: X-T3, X100S, or F11. It lifts the camera while a capture begins, holds a little print when the screenshot is ready, and tucks it away as the shot joins the shelf. Hovering gives a small nod.
+**Settings → Appearance** chooses what sits beside the hardware notch.
 
-The mascot stays inside the existing 16-point collapsed lane and grows with the open strip. It shares the bundled camera artwork with the sound picker. Motion is brief and driven by existing capture state, with no idle animation loop; Reduce Motion uses immediate poses. The right lane shows Clear shelf when shots are present and the permission indicator when empty; the notch dimensions stay the same.
+**Left of the notch** shows a mark in your theme color that follows each capture:
+
+- **Aperture** (default): six blades close like a shutter when a capture begins, stay half-closed while the screenshot's text and tree are read, and reopen as the shot joins the shelf. Hovering turns the blades slightly.
+- **Viewfinder**: corner brackets snap in around a flash, hold closer while text and tree are read, then spring back out.
+- **Camera**: the camera presses in with a flash, and a little print peeks out while the shot is prepared.
+- **None**: an empty lane that still opens and closes the notch.
+
+**Right of the notch** shows **Shot count** (default: how many shots are on the shelf, or the ready dot when it is empty), **Status dot**, or **None**. Whatever you choose, a spinner shows while capturing, and a gray dot shows when Accessibility or Screen Recording is missing, because captures cannot work without them.
+
+Marks stay inside the 16-point collapsed lane and grow with the open strip. Motion is brief and driven by capture state, with no idle animation loop; Reduce Motion switches states immediately. The notch dimensions never change.
 
 ## Copy several shots
 
@@ -68,7 +77,17 @@ Your alternative keyboard shortcut is saved across launches. Include Command, Op
 
 **Shift + Shift** is the default capture gesture. Press **left Shift + right Shift together**; use **Shift + Shift to capture** in Settings to turn it off. It captures once; release both before trying again. Typing, other modifiers, and mouse actions cancel the gesture. This replaces the old double Command option; upgrading preserves explicit enabled/disabled choices. The shelf shows **⇧ + ⇧ to capture** while its monitor is available; otherwise it shows the configured alternative. The menu bar also has a **Capture sound** toggle. Settings offers three illustrated camera tiles for **Fujifilm X-T3**, **Fujifilm X100S**, and **Fujifilm FinePix F11**. Click a camera to select and preview its shutter; click the selected tile to replay. Mint selection and a gentle hover lift make the choice visible. Keyboard and accessibility controls remain native, and hover/press movement respects Reduce Motion. Selection is saved across launches, with X-T3 as the default. The recordings, licenses, credits, and processing are documented in [shutter sound notes](SHUTTER_SOUND.md).
 
-Click the **×** at the top right of a shelf thumbnail to remove that shot. Captures stay in memory until explicitly exported or copied. The session keeps at most eight captures, also trimming older images when their combined PNG size exceeds 64 MB. Quit or Clear session captures removes the in-app history. Removing shots does not delete exported files or copied clipboard data. If a capture finishes while you are viewing another shot, both are preserved; this can temporarily exceed the image budget until the next normal collection. There is no server, account, background screenshot loop, or AI dependency. The only network access is the optional update check described below; captures never leave your Mac.
+Click the **×** at the top right of a shelf thumbnail to remove that shot. Captures stay in memory until explicitly exported or copied. The session keeps at most eight captures, also trimming older images when their combined PNG size exceeds 64 MB. Quit or Clear session captures empties the shelf. With **Keep shot history** on (see below), shots are also saved on this Mac and the shelf comes back after restarting. Removing shots from the shelf does not delete saved history, exported files, or copied clipboard data. If a capture finishes while you are viewing another shot, both are preserved; this can temporarily exceed the image budget until the next normal collection. There is no server, account, background screenshot loop, or AI dependency. The only network access is the optional update check described below; captures never leave your Mac.
+
+## History
+
+Turn on **Settings → History → Keep shot history** to save every shot on this Mac. It is off by default; until you turn it on, shots live only in memory. Saved shots go to `~/Library/Application Support/com.bchewy.NotchShot/History`, in a folder only your user account can open, and never leave your Mac.
+
+Click the **clock** button in the open shelf's header, or choose **Shot history…** from the menu bar, to browse saved shots newest first. Search looks at app names, window titles, and captured text; every word must match, ignoring case and accents. Click a shot to put it back on the shelf and open it. Each row can also **pin**, **copy** (using your Copy content setting, without touching the shelf), or **delete** its shot. **Pinned** shows only pinned shots.
+
+**Keep** removes unpinned shots after 1 week, 1 month (the default), or 3 months, or keeps them forever. Pinned shots, and shots still on the shelf, stay until you delete them. **Clear history…** deletes every saved shot after you confirm. Turning history off stops saving but keeps what was saved; Settings then offers **Delete saved shots…**.
+
+While history is on, the shelf is remembered, so it returns after quitting, reopening for permissions, or installing an update.
 
 ## Updates
 
@@ -79,7 +98,7 @@ Release builds keep themselves current from [GitHub Releases](https://github.com
 
 **Install updates automatically** is on by default. NotchShot checks GitHub shortly after launch and then about every six hours. A newer build downloads in the background and must pass every check before it can run: its checksum must match the release manifest, its version and build must match that release, and its code signature must satisfy the same designated requirement as the running app, with certificate revocation checked. Because Accessibility and Screen Recording access are tied to that same signature, permissions carry over. Anything that fails is discarded.
 
-A verified update installs only when nothing would be lost: the shelf is empty, the notch is closed, and no capture, copy, or paste is in progress. NotchShot then swaps in the new app and reopens within a second. Otherwise the update waits and installs when you quit. **Restart to update** installs it immediately, and clears the shelf like any restart. Updates never install an older build, so switching from Nightly to Stable keeps your nightly until a newer stable release is published.
+A verified update installs only when nothing would be lost: the shelf is empty (or saved by History, which brings it back), the notch is closed, and no capture, copy, or paste is in progress. NotchShot then swaps in the new app and reopens within a second. Otherwise the update waits and installs when you quit. **Restart to update** installs it immediately, and clears the shelf like any restart. Updates never install an older build, so switching from Nightly to Stable keeps your nightly until a newer stable release is published.
 
 Turn automatic updates off to stop all background network access. **Check now**, or **Check for updates…** in the menu bar, still checks on request, and **Restart to update** installs what it finds. Checks send an ordinary anonymous HTTPS request with the app version; no captures, settings, or identifiers are sent.
 

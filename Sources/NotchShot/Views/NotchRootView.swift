@@ -7,8 +7,7 @@ struct NotchRootView: View {
     @Bindable var presentation: NotchPresentation
     var updates: UpdateController?
     @State private var isReviewingBatch = false
-    @State private var isHoveringMascot = false
-    @State private var isHoveringClear = false
+    @State private var isHoveringMark = false
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -57,13 +56,13 @@ struct NotchRootView: View {
         HStack(spacing: 0) {
             Button(action: store.toggleExpanded) {
                 HStack(spacing: 0) {
-                    PhotographerMascotView(
-                        pose: .resolve(isCapturing: store.isCapturing,
-                                       hasPendingShot: store.pendingCapture != nil,
-                                       isLanding: store.isLandingCapture),
-                        camera: store.captureShutterSound,
+                    NotchMarkView(
+                        mark: store.notchMark,
+                        state: .resolve(isCapturing: store.isCapturing,
+                                        hasPendingShot: store.pendingCapture != nil,
+                                        isLanding: store.isLandingCapture),
                         expansion: presentation.progress,
-                        isHovered: isHoveringMascot
+                        isHovered: isHoveringMark
                     )
                         .frame(width: stripWingWidth)
                     Color.clear.frame(width: store.notchWidth)
@@ -72,42 +71,37 @@ struct NotchRootView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .onHover { isHoveringMascot = $0 }
+            .onHover { isHoveringMark = $0 }
             .accessibilityLabel(store.isExpanded ? "Collapse NotchShot" : "Open NotchShot")
             .help(store.isExpanded ? "Collapse" : "Open shot shelf · \(store.captureHintHelp)")
 
-            if !store.captures.isEmpty || store.pendingCapture != nil {
-                Button(action: store.clearHistory) {
-                    Image(systemName: "trash")
-                        .font(.system(size: 10 + 2 * presentation.progress, weight: .medium))
-                        .foregroundStyle(isHoveringClear ? store.theme.accent : store.theme.accent.opacity(0.65))
-                        .frame(width: stripWingWidth, height: stripHeight)
-                        .background(isHoveringClear ? store.theme.accent.opacity(0.1) : .clear, in: Capsule())
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .onHover { isHoveringClear = $0 }
-                .onDisappear { isHoveringClear = false }
-                .accessibilityLabel("Clear shot shelf")
-                .accessibilityHint("Removes all saved and incoming shots. Copied content stays on your clipboard.")
-                .help("Clear all shots from the shelf")
-            } else {
-                Button(action: store.toggleExpanded) {
-                    Group {
-                        if store.isCapturing {
-                            ProgressView().controlSize(.mini).scaleEffect(0.55 + 0.15 * presentation.progress)
-                        } else {
-                            Circle()
-                                .fill(store.accessibilityGranted && store.screenRecordingGranted ? store.theme.accent : Color.white.opacity(0.42))
-                                .frame(width: 4 + presentation.progress, height: 4 + presentation.progress)
-                        }
+            // The right lane only reports; clearing lives in the open shelf.
+            Button(action: store.toggleExpanded) {
+                Group {
+                    switch store.notchIndicator.content(isCapturing: store.isCapturing, shotCount: store.captures.count,
+                                                        permissionsReady: store.accessibilityGranted && store.screenRecordingGranted) {
+                    case .progress:
+                        ProgressView().controlSize(.mini).scaleEffect(0.55 + 0.15 * presentation.progress)
+                    case .count(let count):
+                        Text(count, format: .number)
+                            .font(.system(size: 10 + 2 * presentation.progress, weight: .semibold, design: .rounded).monospacedDigit())
+                            .foregroundStyle(store.theme.accent)
+                    case .dot(let ready):
+                        Circle()
+                            .fill(ready ? store.theme.accent : Color.white.opacity(0.42))
+                            .frame(width: 4 + presentation.progress, height: 4 + presentation.progress)
+                    case .nothing:
+                        Color.clear
                     }
-                    .frame(width: stripWingWidth, height: stripHeight)
-                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(store.isExpanded ? "Collapse NotchShot" : "Open NotchShot")
+                .frame(width: stripWingWidth, height: stripHeight)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(store.isExpanded ? "Collapse NotchShot" : "Open NotchShot")
+            .accessibilityValue(store.captures.isEmpty ? "" : "\(store.captures.count) \(store.captures.count == 1 ? "shot" : "shots") on the shelf")
+            .help(store.captures.isEmpty ? (store.isExpanded ? "Collapse" : "Open shot shelf")
+                  : "\(store.captures.count) \(store.captures.count == 1 ? "shot" : "shots") on the shelf")
         }
     }
 
@@ -129,12 +123,25 @@ struct NotchRootView: View {
                     ShotShelfView(store: store)
                     Spacer(minLength: 0)
                 }
+            case .history:
+                if let history = store.history {
+                    HistoryView(store: store, history: history)
+                }
             }
         }
         .padding(.horizontal, 14)
         .padding(.top, 6)
         .padding(.bottom, 16)
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    private var title: String {
+        switch store.page {
+        case .shelf: "NotchShot"
+        case .settings: "Settings"
+        case .detail: "Shot details"
+        case .history: "History"
+        }
     }
 
     private var header: some View {
@@ -145,11 +152,24 @@ struct NotchRootView: View {
                     .accessibilityLabel("Back to shot shelf")
                     .help("Back to shot shelf")
             }
-            Text(store.page == .settings ? "Settings" : store.page == .detail ? "Shot details" : "NotchShot")
+            Text(title)
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
                 .tracking(-0.3)
             Spacer(minLength: 8)
             StatusNoticeView(notice: store.statusNotice, store: store)
+            if store.page == .shelf && (!store.captures.isEmpty || store.pendingCapture != nil) {
+                Button(action: store.clearHistory) { Image(systemName: "trash") }
+                    .buttonStyle(NotchIconButtonStyle())
+                    .accessibilityLabel("Clear shot shelf")
+                    .accessibilityHint("Removes every shot from the shelf, including incoming ones. Copied content and saved history stay.")
+                    .help("Clear all shots from the shelf")
+            }
+            if store.page == .shelf, store.history?.isEnabled == true {
+                Button(action: store.showHistory) { Image(systemName: "clock.arrow.circlepath") }
+                    .buttonStyle(NotchIconButtonStyle())
+                    .accessibilityLabel("Shot history")
+                    .help("Search and reopen saved shots")
+            }
             if store.page != .settings {
                 Button(action: store.showCaptureSettings) { Image(systemName: "slider.horizontal.3") }
                     .buttonStyle(NotchIconButtonStyle())

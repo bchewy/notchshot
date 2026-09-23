@@ -10,6 +10,9 @@ struct NotchShotApp: App {
             Button("Capture app  \(delegate.store.captureHintLabel)") { delegate.store.captureFrontmost() }
             Button("Capture shortcut…") { delegate.store.showCaptureSettings() }
             Button("Show / hide notch") { delegate.store.toggleExpanded() }
+            if delegate.history.isEnabled {
+                Button("Shot history…") { delegate.store.showHistory() }
+            }
             Toggle("Both Shift keys to capture", isOn: Binding(
                 get: { delegate.store.bothShiftEnabled },
                 set: { delegate.store.bothShiftEnabled = $0 }
@@ -38,16 +41,24 @@ struct NotchShotApp: App {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    let store = CaptureStore(preferences: .standard, clipboard: .general)
+    let history = ShotHistory(preferences: .standard, archive: ShotArchive(root: ShotArchive.defaultRoot()))
+    let store: CaptureStore
     let updates = UpdateController.forRunningApp(preferences: .standard)
     private var panelController: NotchPanelController?
     private let shortcut = GlobalShortcutService()
     private let bothShift = BothShiftShortcutService()
     private var cardController: CaptureCardController?
 
+    override init() {
+        store = CaptureStore(preferences: .standard, clipboard: .general, history: history)
+        super.init()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Deliberate accessory utility: lives in the notch and menu bar, with no Dock icon.
         NSApp.setActivationPolicy(.accessory)
+        // Loaded before the store starts so the previous shelf can come back.
+        history.load()
         store.start()
         panelController = NotchPanelController(store: store, updates: updates)
         panelController?.show()
@@ -89,6 +100,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func relaunch() {
+        Task { @MainActor in
+            // The next instance reads history at launch, so queued saves land first.
+            await history.settle(timeout: .seconds(3))
+            performRelaunch()
+        }
+    }
+
+    private func performRelaunch() {
         // Reopening already clears the shelf, so a waiting update goes in first.
         updates.installPendingUpdate()
         // Release the global shortcut before the replacement instance registers it.
@@ -107,6 +126,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 } else { NSApp.terminate(nil) }
             }
         }
+    }
+
+    /// A shot captured just before quitting may still be saving to history.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard history.isEnabled else { return .terminateNow }
+        Task { @MainActor in
+            await history.settle(timeout: .seconds(3))
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationWillTerminate(_ notification: Notification) {

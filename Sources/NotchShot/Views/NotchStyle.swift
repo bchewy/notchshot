@@ -20,7 +20,7 @@ enum NotchStyle {
         switch page {
         case .shelf: height = 180
         case .settings: height = 440
-        case .detail: height = expandedHeight
+        case .detail, .history: height = expandedHeight
         }
         return CGSize(width: expandedWidth, height: height)
     }

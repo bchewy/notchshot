@@ -20,11 +20,13 @@ your notch. Copy one shot or several into your next conversation.
 - Customize shutter sounds, automatic copying, and gentle auto-collapse behavior.
 - Pick Mint, Sky, Lavender, Rose, Peach, or Gold in Appearance settings.
 - Optionally follow your pointer to the active display, keeping the same shelf.
+- Optionally keep a searchable shot history on this Mac, with pins and retention limits.
 - Stay current on the Stable or Nightly channel, with signature-verified automatic updates.
 
 The app has no account, cloud service, or AI dependency. Its only network access
 is an optional update check against GitHub Releases. Captures remain in
-memory until you copy or export them. Capture coverage and paste support vary
+memory until you copy or export them, unless you turn on shot history, which
+saves them only on this Mac. Capture coverage and paste support vary
 by destination app.
 
 ## Build and run
@@ -67,9 +69,10 @@ GitHub Actions runs the build and the suite on every push and pull request
 of `main` and the stable releases published from `v*` tags; see
 [releasing](docs/RELEASING.md).
 
-The current suite has **412 tests**, covering the capture entry path, capture
+The current suite has **434 tests**, covering the capture entry path, capture
 formatting, clipboard preparation, selection, shortcuts, shelf motion, and
-auto-collapse, plus theme preferences, display following, and update verification.
+auto-collapse, plus theme preferences, display following, shot history, and
+update verification.
 See [verification notes](docs/VERIFICATION.md) for the historical checks and
 [the user guide](docs/USER_GUIDE.md) for permissions and signing troubleshooting.
 

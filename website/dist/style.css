@@ -348,12 +348,12 @@ h1 span {
   height: 32px;
   position: relative;
 }
-.mascot {
+.aperture {
   position: absolute;
-  left: 12px;
-  top: 3px;
-  width: 31px;
-  height: 23px;
+  left: 16px;
+  top: 7px;
+  width: 18px;
+  height: 18px;
 }
 .notch-camera {
   position: absolute;
@@ -365,14 +365,19 @@ h1 span {
   border: 1px solid #3b453f;
   border-radius: 50%;
 }
-.shelf-trash {
+.shelf-count {
   position: absolute;
-  right: 15px;
-  top: 9px;
+  right: 17px;
+  top: 8px;
+  color: var(--mint);
+  font: 600 12px/16px ui-rounded, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-variant-numeric: tabular-nums;
+  opacity: var(--shelf-opacity);
+}
+.shelf-clear {
   width: 12px;
   height: 12px;
-  color: var(--mint);
-  opacity: var(--shelf-opacity);
+  color: #86938b;
 }
 .shelf-ui {
   position: absolute;

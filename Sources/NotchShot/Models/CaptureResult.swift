@@ -7,7 +7,7 @@ struct CaptureTarget: Sendable {
     let bundleIdentifier: String
 }
 
-struct AXNode: Codable, Identifiable, Sendable {
+struct AXNode: Codable, Equatable, Identifiable, Sendable {
     var id: Int
     var role: String
     var roleDescription: String
