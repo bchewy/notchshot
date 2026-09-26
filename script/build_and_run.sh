@@ -67,6 +67,12 @@ trap 'exit 143' TERM
 
 SIGNING_IDENTITY="${NOTCHSHOT_SIGNING_IDENTITY:-}"
 SIGNING_CACHE="$PROJECT_ROOT/work/signing-identity.txt"
+# Releases prefer a Developer ID certificate, which notarization requires, over
+# the saved development identity.
+if [[ -z "$SIGNING_IDENTITY" && "$MODE" == --stage-only ]]; then
+  SIGNING_IDENTITY="$(/usr/bin/security find-identity -v -p codesigning 2>/dev/null \
+    | /usr/bin/awk '/"Developer ID Application:/ && !/CSSMERR_/ {print $2; exit}')"
+fi
 if [[ -z "$SIGNING_IDENTITY" ]]; then
   AVAILABLE_IDENTITIES="$(/usr/bin/security find-identity -v -p codesigning 2>/dev/null || true)"
   if [[ -f "$SIGNING_CACHE" ]]; then
@@ -93,14 +99,9 @@ if [[ -z "$SIGNING_IDENTITY" ]]; then
   fi
 fi
 
-# Releases prefer a Developer ID certificate, which notarization requires.
-if [[ "$MODE" == --stage-only && -z "${NOTCHSHOT_SIGNING_IDENTITY:-}" ]]; then
-  DEVELOPER_ID="$(/usr/bin/security find-identity -v -p codesigning 2>/dev/null \
-    | /usr/bin/awk '/"Developer ID Application:/ && !/CSSMERR_/ {print $2; exit}')"
-  [[ -z "$DEVELOPER_ID" ]] || SIGNING_IDENTITY="$DEVELOPER_ID"
-fi
 SIGNING_OPTIONS=(--timestamp=none)
-if /usr/bin/security find-identity -v -p codesigning 2>/dev/null | /usr/bin/grep -F "$SIGNING_IDENTITY" | /usr/bin/grep -q '"Developer ID Application:'; then
+if /usr/bin/security find-identity -v -p codesigning 2>/dev/null \
+  | /usr/bin/awk -v identity="$SIGNING_IDENTITY" '$2 == identity' | /usr/bin/grep -q '"Developer ID Application:'; then
   # Notarization requires the hardened runtime and a secure timestamp.
   SIGNING_OPTIONS=(--options runtime --timestamp)
 fi
