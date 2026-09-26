@@ -119,6 +119,21 @@ protocol UpdateSignatureVerifying: Sendable {
 struct CodeSignatureVerifier: UpdateSignatureVerifying, @unchecked Sendable {
     // SecRequirement is an immutable CF object once created.
     let requirement: SecRequirement
+    /// The one other identity an update may carry: NotchShot signed with the
+    /// team's Developer ID for notarized releases. Nothing else is accepted.
+    var successor: SecRequirement? = CodeSignatureVerifier.developerID
+
+    /// Apple's designated requirement for a Developer ID app: this bundle,
+    /// a Developer ID certificate chain, and this team.
+    static let developerIDRequirement = #"identifier "com.bchewy.NotchShot" and anchor apple generic"#
+        + #" and certificate 1[field.1.2.840.113635.100.6.2.6] and certificate leaf[field.1.2.840.113635.100.6.1.13]"#
+        + #" and certificate leaf[subject.OU] = "W6JNF8VXYW""#
+
+    static let developerID: SecRequirement? = {
+        var requirement: SecRequirement?
+        guard SecRequirementCreateWithString(developerIDRequirement as CFString, [], &requirement) == errSecSuccess else { return nil }
+        return requirement
+    }()
 
     /// Ad-hoc and unsigned builds have no stable identity to carry forward.
     static func forRunningApp() throws -> CodeSignatureVerifier {
@@ -146,7 +161,10 @@ struct CodeSignatureVerifier: UpdateSignatureVerifying, @unchecked Sendable {
         // kSecCSEnforceRevocationChecks is not imported into Swift. It rejects
         // a revoked certificate even when it shares this certificate's name.
         if checkRevocation { flags.insert(SecCSFlags(rawValue: 1 << 30)) }
-        let status = SecStaticCodeCheckValidityWithErrors(staticCode, flags, requirement, nil)
+        var status = SecStaticCodeCheckValidityWithErrors(staticCode, flags, requirement, nil)
+        if status != errSecSuccess, let successor {
+            status = SecStaticCodeCheckValidityWithErrors(staticCode, flags, successor, nil)
+        }
         guard status == errSecSuccess else {
             throw UpdateError.verification("The downloaded update isn’t signed by NotchShot’s developer (error \(status)). It was discarded.")
         }

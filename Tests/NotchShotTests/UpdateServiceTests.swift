@@ -188,6 +188,22 @@ final class UpdateServiceTests: XCTestCase {
             .verify(unsigned, checkRevocation: false))
     }
 
+    func testOnlyTheTeamsDeveloperIDIsAcceptedBesidesTheRunningIdentity() throws {
+        let calculator = URL(fileURLWithPath: "/System/Applications/Calculator.app")
+        XCTAssertNotNil(CodeSignatureVerifier.developerID, "The pinned Developer ID requirement must compile.")
+        // By default the successor is the pinned Developer ID, which an Apple-signed app doesn't meet.
+        XCTAssertThrowsError(try CodeSignatureVerifier(requirement: requirement(#"identifier "com.bchewy.NotchShot""#))
+            .verify(calculator, checkRevocation: false))
+        // The successor is consulted only when the running identity doesn't match.
+        try CodeSignatureVerifier(requirement: requirement(#"identifier "com.bchewy.NotchShot""#),
+                                  successor: requirement("anchor apple")).verify(calculator, checkRevocation: false)
+        XCTAssertThrowsError(try CodeSignatureVerifier(requirement: requirement(#"identifier "com.bchewy.NotchShot""#),
+                                                       successor: nil).verify(calculator, checkRevocation: false))
+        let unsigned = try makeApp(build: 41, in: root.appendingPathComponent("UnsignedSuccessor", isDirectory: true))
+        XCTAssertThrowsError(try CodeSignatureVerifier(requirement: requirement(#"identifier "com.bchewy.NotchShot""#),
+                                                       successor: requirement("anchor apple")).verify(unsigned, checkRevocation: false))
+    }
+
     // MARK: - Fixtures
 
     private func makeStagingFixture(installedBuild: Int, updateBuild: Int, verifier: RecordingVerifier,
