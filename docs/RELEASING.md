@@ -51,6 +51,38 @@ with the same name still satisfies the designated requirement. Moving to a
 different certificate type, such as Developer ID, changes the requirement, so
 installed copies need one manual reinstall to follow.
 
+## Notarization (Developer ID)
+
+Releases signed with a **Developer ID Application** certificate are notarized
+and stapled, so Gatekeeper opens them without an Open Anyway step. Release
+staging prefers that certificate when the keychain has one, and signs with
+the hardened runtime and a secure timestamp. CI then runs `script/notarize.sh`,
+and the packager refuses a Developer ID build without a stapled ticket.
+Apple Development builds are packaged unnotarized, as before.
+
+CI needs three more secrets, from an App Store Connect API key (Users and
+Access → Integrations → Team Keys, Developer role):
+
+- `NOTCHSHOT_NOTARY_KEY`: the contents of the `.p8` file
+- `NOTCHSHOT_NOTARY_KEY_ID`: its key ID
+- `NOTCHSHOT_NOTARY_ISSUER`: the issuer ID
+
+To notarize locally, store the same key once with
+`xcrun notarytool store-credentials notchshot --key … --key-id … --issuer …`.
+
+### Moving from Apple Development to Developer ID
+
+Installed copies accept an update only when it carries their own designated
+requirement or, since 0.8.3, the pinned Developer ID requirement for this bundle
+and team `W6JNF8VXYW` (`CodeSignatureVerifier.developerIDRequirement`). So:
+
+1. Ship 0.8.3 signed with Apple Development, and let it reach installs.
+2. Replace `NOTCHSHOT_SIGNING_P12_BASE64` and `NOTCHSHOT_SIGNING_P12_PASSWORD`
+   with the Developer ID certificate and add the notary secrets.
+3. The next release is notarized. Copies on 0.8.3 or later update to it; older
+   copies need one manual install. macOS ties Accessibility and Screen Recording
+   to the certificate, so everyone grants them once more.
+
 ## Publishing a stable release
 
 1. On `main`, set `APP_VERSION` in `script/build_and_run.sh` to the new version

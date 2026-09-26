@@ -7,7 +7,7 @@ case "$MODE" in run|--build-only|--stage-only|--verify|--debug|--logs|--telemetr
 APP_NAME="NotchShot"
 BUNDLE_ID="com.bchewy.NotchShot"
 # Stable tags must match this version (docs/RELEASING.md).
-APP_VERSION="0.8.2"
+APP_VERSION="0.8.3"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_BUNDLE="$PROJECT_ROOT/outputs/$APP_NAME.app"
 STAGED_APP="$PROJECT_ROOT/work/staged/$APP_NAME.app"
@@ -67,6 +67,12 @@ trap 'exit 143' TERM
 
 SIGNING_IDENTITY="${NOTCHSHOT_SIGNING_IDENTITY:-}"
 SIGNING_CACHE="$PROJECT_ROOT/work/signing-identity.txt"
+# Releases prefer a Developer ID certificate, which notarization requires, over
+# the saved development identity.
+if [[ -z "$SIGNING_IDENTITY" && "$MODE" == --stage-only ]]; then
+  SIGNING_IDENTITY="$(/usr/bin/security find-identity -v -p codesigning 2>/dev/null \
+    | /usr/bin/awk '/"Developer ID Application:/ && !/CSSMERR_/ {print $2; exit}')"
+fi
 if [[ -z "$SIGNING_IDENTITY" ]]; then
   AVAILABLE_IDENTITIES="$(/usr/bin/security find-identity -v -p codesigning 2>/dev/null || true)"
   if [[ -f "$SIGNING_CACHE" ]]; then
@@ -91,6 +97,13 @@ if [[ -z "$SIGNING_IDENTITY" ]]; then
       echo "No development signing identity available; using ad-hoc signing. Changed builds may need privacy permissions again."
     fi
   fi
+fi
+
+SIGNING_OPTIONS=(--timestamp=none)
+if /usr/bin/security find-identity -v -p codesigning 2>/dev/null \
+  | /usr/bin/awk -v identity="$SIGNING_IDENTITY" '$2 == identity' | /usr/bin/grep -q '"Developer ID Application:'; then
+  # Notarization requires the hardened runtime and a secure timestamp.
+  SIGNING_OPTIONS=(--options runtime --timestamp)
 fi
 
 if [[ "$MODE" == --stage-only && "$SIGNING_IDENTITY" == - ]]; then
@@ -164,7 +177,7 @@ PLIST
 
 # Reuse a development identity when available so macOS sees updates as the same
 # app. The cached value is a public certificate fingerprint, never a private key.
-if ! /usr/bin/codesign --force --sign "$SIGNING_IDENTITY" --timestamp=none --identifier "$BUNDLE_ID" "$STAGED_APP"; then
+if ! /usr/bin/codesign --force --sign "$SIGNING_IDENTITY" "${SIGNING_OPTIONS[@]}" --identifier "$BUNDLE_ID" "$STAGED_APP"; then
   echo "Signing failed. The new app was not installed; the existing app has not been stopped or replaced." >&2
   echo "The staged build is at $STAGED_APP. Resolve the reported signing error before retrying this command." >&2
   exit 1

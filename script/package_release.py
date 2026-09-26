@@ -142,6 +142,20 @@ def source_paths():
     return selected
 
 
+def notarization(bundle):
+    """'stapled' for a notarized Developer ID app; Developer ID builds must be."""
+    details = subprocess.run(["/usr/bin/codesign", "--display", "--verbose=2", str(bundle)],
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, check=False).stdout.decode("utf-8", "replace")
+    if "Authority=Developer ID Application:" not in details:
+        return "not_notarized"
+    stapled = subprocess.run(["/usr/bin/xcrun", "stapler", "validate", str(bundle)],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False).returncode == 0
+    if not stapled:
+        raise PackagingError("This Developer ID build has no stapled notarization ticket. Run script/notarize.sh first.")
+    run("/usr/sbin/spctl", "--assess", "--type", "execute", str(bundle))
+    return "stapled"
+
+
 def verify_zip(path):
     with zipfile.ZipFile(path) as archive:
         bad = archive.testzip()
@@ -182,7 +196,7 @@ def build_dmg(bundle, destination):
         "NotchShot", str(destination))
 
 
-def verify_dmg(path, identity, revision, mount_point):
+def verify_dmg(path, identity, revision, notarized, mount_point):
     """Mounts the image read-only and checks it holds exactly the verified app."""
     run("/usr/bin/hdiutil", "verify", "-quiet", str(path))
     mount_point.mkdir()
@@ -199,6 +213,8 @@ def verify_dmg(path, identity, revision, mount_point):
         if bundle_identity(app, revision) != identity:
             raise PackagingError("The app in the disk image differs from the input in version, source identity, or executable hash.")
         verify_signature(app)
+        if notarization(app) != notarized:
+            raise PackagingError("The app in the disk image lost its notarization ticket.")
     finally:
         run("/usr/bin/hdiutil", "detach", "-quiet", "-force", str(mount_point))
 
@@ -236,6 +252,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix=".notchshot-package-", dir=output) as temporary:
         scratch = Path(temporary)
         verify_signature(bundle, scratch / "certificates")
+        notarized = notarization(bundle)
         app_zip, app_dmg, source_zip, checksums, metadata = [scratch / name for name in names]
         run("/usr/bin/ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", str(bundle), str(app_zip))
         verify_zip(app_zip)
@@ -247,11 +264,11 @@ def main():
             raise PackagingError("The extracted app version, source identity, or executable hash differs from the input.")
         verify_signature(extracted_app)
         build_dmg(bundle, app_dmg)
-        verify_dmg(app_dmg, identity, revision, scratch / "dmg-mount")
+        verify_dmg(app_dmg, identity, revision, notarized, scratch / "dmg-mount")
 
         source_prefix = f"{stem}-source/"
         run("git", "archive", "--format=zip", f"--prefix={source_prefix}", f"--output={source_zip}", revision, "--", *selected)
-        build_metadata = {**identity, "signature": "certificate-backed", "signature_validation": "codesign --verify --deep --strict", "certificate_validation": "security verify-cert -p codeSign -R ocsp -R require", "notarization": "not_checked"}
+        build_metadata = {**identity, "signature": "certificate-backed", "signature_validation": "codesign --verify --deep --strict", "certificate_validation": "security verify-cert -p codeSign -R ocsp -R require", "notarization": notarized}
         with zipfile.ZipFile(source_zip, "a", compression=zipfile.ZIP_DEFLATED) as archive:
             archive.writestr(source_prefix + "SOURCE_REVISION", revision + "\n")
             archive.writestr(source_prefix + "BUILD_METADATA.json", json.dumps(build_metadata, indent=2, sort_keys=True) + "\n")
@@ -284,7 +301,10 @@ def main():
     print(f"Verified {identity['channel'].lower()} {identity['version']} ({identity['build']}) from {revision}")
     for name in names:
         print(output / name)
-    print("Certificate signature verified. Notarization was not assessed; this is not a notarized release.")
+    if notarized == "stapled":
+        print("Certificate signature verified. Notarized by Apple, with the ticket stapled.")
+    else:
+        print("Certificate signature verified. This release is not notarized.")
 
 
 if __name__ == "__main__":

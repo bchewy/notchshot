@@ -74,9 +74,21 @@ jobs:
           NOTCHSHOT_SIGNING_P12_PASSWORD: ${{ secrets.NOTCHSHOT_SIGNING_P12_PASSWORD }}
         run: script/ci_signing_keychain.sh import
 
-      - name: Build, sign, and package
+      - name: Build, sign, notarize, and package
+        env:
+          NOTCHSHOT_NOTARY_KEY: ${{ secrets.NOTCHSHOT_NOTARY_KEY }}
+          NOTCHSHOT_NOTARY_KEY_ID: ${{ secrets.NOTCHSHOT_NOTARY_KEY_ID }}
+          NOTCHSHOT_NOTARY_ISSUER: ${{ secrets.NOTCHSHOT_NOTARY_ISSUER }}
         run: |
           NOTCHSHOT_BUILD_CHANNEL=Nightly ./script/build_and_run.sh --stage-only
+          # Developer ID builds are notarized and stapled; Apple Development builds are not.
+          signature="$(codesign --display --verbose=2 work/staged/NotchShot.app 2>&1)"
+          if grep -q '^Authority=Developer ID Application:' <<< "$signature"; then
+            key="$RUNNER_TEMP/notary-key.p8"
+            printf '%s' "$NOTCHSHOT_NOTARY_KEY" > "$key"
+            NOTCHSHOT_NOTARY_KEY_PATH="$key" script/notarize.sh work/staged/NotchShot.app
+            rm -f "$key"
+          fi
           python3 script/package_release.py work/staged/NotchShot.app --output-dir "$RUNNER_TEMP/release"
           staged=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' work/staged/NotchShot.app/Contents/Info.plist)
           if [ "$staged" != "$BUILD" ]; then

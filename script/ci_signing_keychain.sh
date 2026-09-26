@@ -34,9 +34,12 @@ case "${1:-}" in
     fi
     security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
     security list-keychains -d user -s "$KEYCHAIN"
-    IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN" | awk '/"Apple Development:/ && !/CSSMERR_/ {print $2; exit}')"
+    # A Developer ID certificate (notarized releases) wins over Apple Development.
+    IDENTITIES="$(security find-identity -v -p codesigning "$KEYCHAIN")"
+    IDENTITY="$(awk '/"Developer ID Application:/ && !/CSSMERR_/ {print $2; exit}' <<< "$IDENTITIES")"
+    [[ -n "$IDENTITY" ]] || IDENTITY="$(awk '/"Apple Development:/ && !/CSSMERR_/ {print $2; exit}' <<< "$IDENTITIES")"
     if [[ -z "$IDENTITY" ]]; then
-      echo "::error::The signing secret holds no valid Apple Development identity."
+      echo "::error::The signing secret holds no valid Developer ID Application or Apple Development identity."
       exit 1
     fi
     echo "NOTCHSHOT_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
